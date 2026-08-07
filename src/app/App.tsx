@@ -27,12 +27,10 @@ export function App({ engine: suppliedEngine }: AppProps) {
           </span>
           Local Soundscape
         </a>
-        <span className="privacy-badge">Private by design</span>
       </header>
 
       <main>
         <section className="hero" aria-labelledby="page-title">
-          <p className="eyebrow">Your audio, your space</p>
           <h1 id="page-title">
             Layer sounds.
             <br />
@@ -105,9 +103,8 @@ export function App({ engine: suppliedEngine }: AppProps) {
 
       <footer>
         <p>
-          <strong>Private by design.</strong> Your audio stays on this device
-          and is never uploaded. Files are forgotten when you close or refresh
-          the app.
+          Your audio stays on this device and is never uploaded. Files are
+          forgotten when you close or refresh the app.
         </p>
       </footer>
     </div>
