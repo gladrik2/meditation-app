@@ -1,0 +1,94 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it, vi } from 'vitest'
+import { createMockEngine } from '../test/mockEngine'
+import { App } from './App'
+
+const audioFile = (name: string) =>
+  new File(['not-real-audio'], name, { type: 'audio/wav' })
+
+describe('App', () => {
+  it('shows the private empty state initially', () => {
+    render(<App engine={createMockEngine()} />)
+    expect(screen.getByText('Your soundscape is empty')).toBeInTheDocument()
+    expect(
+      screen.getByText(/your files never leave your device/i)
+    ).toBeInTheDocument()
+  })
+
+  it('loads multiple selected audio files and removes a track', async () => {
+    const user = userEvent.setup()
+    const engine = createMockEngine()
+    render(<App engine={engine} />)
+    const input = document.querySelector<HTMLInputElement>('#audio-files')!
+    await user.upload(input, [audioFile('rain.wav'), audioFile('birds.wav')])
+    expect(await screen.findByText('rain.wav')).toBeInTheDocument()
+    expect(screen.getByText('birds.wav')).toBeInTheDocument()
+    expect(engine.loadTrack).toHaveBeenCalledTimes(2)
+    await user.click(screen.getByRole('button', { name: 'Remove rain.wav' }))
+    expect(screen.queryByText('rain.wav')).not.toBeInTheDocument()
+    expect(engine.removeTrack).toHaveBeenCalledWith('track-0')
+  })
+
+  it('updates per-track and master volume', async () => {
+    const user = userEvent.setup()
+    const engine = createMockEngine()
+    render(<App engine={engine} />)
+    await user.upload(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      audioFile('ocean.wav')
+    )
+    const trackVolume = await screen.findByLabelText('Volume for ocean.wav')
+    fireEvent.change(trackVolume, { target: { value: '0.02' } })
+    expect(engine.setTrackVolume).toHaveBeenLastCalledWith('track-0', 0.02)
+    const master = screen.getByLabelText('Master volume')
+    fireEvent.change(master, { target: { value: '0.01' } })
+    expect(engine.setMasterVolume).toHaveBeenLastCalledWith(0.01)
+    expect(screen.getByText('1%')).toBeInTheDocument()
+  })
+
+  it('shows errors for unsupported and unreadable files', async () => {
+    const user = userEvent.setup({ applyAccept: false })
+    const engine = createMockEngine()
+    vi.mocked(engine.loadTrack).mockRejectedValueOnce(
+      new Error('decode failed')
+    )
+    render(<App engine={engine} />)
+    const input = document.querySelector<HTMLInputElement>('#audio-files')!
+    await user.upload(
+      input,
+      new File(['text'], 'notes.txt', { type: 'text/plain' })
+    )
+    expect(
+      await screen.findByText('Unsupported file type.')
+    ).toBeInTheDocument()
+    await user.upload(input, audioFile('broken.wav'))
+    expect(
+      await screen.findByText('This audio file could not be read or decoded.')
+    ).toBeInTheDocument()
+  })
+
+  it('plays, pauses, and controls all ready tracks through the engine', async () => {
+    const user = userEvent.setup()
+    const engine = createMockEngine()
+    render(<App engine={engine} />)
+    await user.upload(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      audioFile('rain.wav')
+    )
+    const play = await screen.findByRole('button', { name: 'Play rain.wav' })
+    await user.click(play)
+    expect(engine.play).toHaveBeenCalledWith('track-0')
+    await user.click(screen.getByRole('button', { name: 'Pause rain.wav' }))
+    expect(engine.pause).toHaveBeenCalledWith('track-0')
+    await user.click(screen.getByRole('button', { name: /Play All/ }))
+    expect(engine.playAll).toHaveBeenCalledWith(['track-0'])
+    await user.click(screen.getByRole('button', { name: /Stop All/ }))
+    expect(engine.stopAll).toHaveBeenCalled()
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Play rain.wav' })
+      ).toBeInTheDocument()
+    )
+  })
+})
