@@ -4,10 +4,11 @@ Local Soundscape is a client-side audio mixer for layering local audio into a pe
 
 ## Current capabilities
 
-- Select and decode multiple local audio files.
+- Select multiple local audio files and one optional image through one upload control.
 - Play or pause each track, or start all ready tracks together.
 - Adjust per-track and master volume and stop all playback.
 - Remove tracks and see clear unsupported/unreadable-file errors.
+- Add one local soundscape image and view it in theater or browser full-screen mode.
 - Install the application and reopen its cached shell offline.
 - Responsive, keyboard-accessible controls for mobile and desktop screens.
 
@@ -17,7 +18,7 @@ React, strict TypeScript, Vite, the Web Audio API, `vite-plugin-pwa`, Vitest, Re
 
 ## Privacy model
 
-Audio is read through the standard browser `File` API and decoded in memory by one shared `AudioContext`. Files, file contents, and filenames are not uploaded, sent to analytics, or added to service-worker caches. Selected files are forgotten on refresh or close.
+Audio and the optional soundscape image are read through standard browser APIs and held locally in memory. Audio is decoded by one shared `AudioContext`. Files, file contents, and filenames are not uploaded, sent to analytics, or added to service-worker caches. Selected files are forgotten on refresh or close.
 
 ## Development
 

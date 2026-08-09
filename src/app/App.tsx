@@ -1,7 +1,8 @@
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { WebAudioEngine } from '../audio/WebAudioEngine'
 import type { AudioEngine } from '../audio/types'
 import { TrackList } from '../components/TrackList'
+import { SoundscapeImage } from '../components/SoundscapeImage'
 import { VolumeControl } from '../components/VolumeControl'
 import { useTracks } from '../features/tracks/useTracks'
 
@@ -15,6 +16,7 @@ export function App({ engine: suppliedEngine }: AppProps) {
     [suppliedEngine]
   )
   const inputRef = useRef<HTMLInputElement>(null)
+  const [image, setImage] = useState<File | null>(null)
   const controls = useTracks(engine)
   const ready = controls.tracks.some((track) => track.status === 'ready')
 
@@ -45,11 +47,23 @@ export function App({ engine: suppliedEngine }: AppProps) {
             className="visually-hidden"
             id="audio-files"
             type="file"
-            accept="audio/*"
+            accept="audio/*,image/*"
             multiple
             onChange={(event) => {
-              if (event.currentTarget.files)
-                void controls.addFiles(event.currentTarget.files)
+              const files = Array.from(event.currentTarget.files ?? [])
+              const audioAndUnsupportedFiles = files.filter(
+                (file) => !file.type.startsWith('image/')
+              )
+              const selectedImages = files.filter((file) =>
+                file.type.startsWith('image/')
+              )
+
+              if (audioAndUnsupportedFiles.length > 0) {
+                void controls.addFiles(audioAndUnsupportedFiles)
+              }
+              if (selectedImages.length > 0) {
+                setImage(selectedImages.at(-1) ?? null)
+              }
               event.currentTarget.value = ''
             }}
           />
@@ -58,14 +72,19 @@ export function App({ engine: suppliedEngine }: AppProps) {
             type="button"
             onClick={() => inputRef.current?.click()}
           >
-            <span aria-hidden="true">＋</span> Choose audio files
+            <span aria-hidden="true">＋</span> Choose files
           </button>
           <p className="file-help">
-            MP3, WAV, OGG, and other formats supported by your browser
+            Select multiple audio files and one optional image
           </p>
         </section>
 
         <section className="mixer" aria-label="Soundscape mixer">
+          <SoundscapeImage
+            image={image}
+            onChoose={() => inputRef.current?.click()}
+            onRemove={() => setImage(null)}
+          />
           <div className="master-controls">
             <div className="master-buttons">
               <button
