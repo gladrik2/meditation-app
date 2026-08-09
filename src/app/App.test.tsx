@@ -256,6 +256,59 @@ describe('App', () => {
     )
   })
 
+  it('starts, pauses, resumes, and resets a count-up meditation', async () => {
+    vi.useFakeTimers()
+    const engine = createMockEngine()
+    render(<App engine={engine} />)
+    fireEvent.change(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      { target: { files: [audioFile('rain.wav')] } }
+    )
+    await act(async () => {})
+
+    const start = screen.getByRole('button', { name: /Start Meditation/ })
+    fireEvent.click(start)
+    expect(engine.playAll).toHaveBeenCalledWith(['track-0'])
+    await act(() => vi.advanceTimersByTimeAsync(5000))
+    expect(screen.getByText('00:05')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ⅱ Pause' }))
+    expect(engine.pause).toHaveBeenCalledWith('track-0')
+    await act(() => vi.advanceTimersByTimeAsync(3000))
+    expect(screen.getByText('00:05')).toBeInTheDocument()
+
+    fireEvent.click(start)
+    await act(() => vi.advanceTimersByTimeAsync(2000))
+    expect(screen.getByText('00:07')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Reset/ }))
+    expect(screen.getByText('00:00')).toBeInTheDocument()
+  })
+
+  it('counts down for the selected duration and pauses audio at zero', async () => {
+    vi.useFakeTimers()
+    const engine = createMockEngine()
+    render(<App engine={engine} />)
+    fireEvent.change(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      { target: { files: [audioFile('rain.wav')] } }
+    )
+    await act(async () => {})
+
+    fireEvent.change(screen.getByLabelText('Timer type'), {
+      target: { value: 'countdown' }
+    })
+    fireEvent.change(screen.getByLabelText('Minutes'), {
+      target: { value: '1' }
+    })
+    expect(screen.getByText('01:00')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Start Meditation/ }))
+    await act(() => vi.advanceTimersByTimeAsync(60_000))
+
+    expect(screen.getByText('00:00')).toBeInTheDocument()
+    expect(engine.pause).toHaveBeenCalledWith('track-0')
+    expect(screen.getByRole('button', { name: 'Ⅱ Pause' })).toBeDisabled()
+  })
+
   it('reflects natural completion and rejected playback promises', async () => {
     const user = userEvent.setup()
     const engine = createMockEngine()

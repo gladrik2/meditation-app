@@ -230,6 +230,12 @@ export function useTracks(engine: AudioEngine) {
     engine.stopAll()
   }
 
+  const pauseAll = useCallback(() => {
+    for (const track of tracksRef.current) {
+      if (track.isPlaying) engine.pause(track.id)
+    }
+  }, [engine])
+
   return {
     tracks,
     masterVolume,
@@ -240,6 +246,7 @@ export function useTracks(engine: AudioEngine) {
     setEffectChance,
     setMasterVolume,
     playAll,
+    pauseAll,
     stopAll
   }
 }

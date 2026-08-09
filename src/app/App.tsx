@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { WebAudioEngine } from '../audio/WebAudioEngine'
 import type { AudioEngine } from '../audio/types'
 import { TrackList } from '../components/TrackList'
+import { MeditationTimer } from '../components/MeditationTimer'
 import { SoundscapeImage } from '../components/SoundscapeImage'
 import { VolumeControl } from '../components/VolumeControl'
 import { useTracks } from '../features/tracks/useTracks'
@@ -84,6 +85,11 @@ export function App({ engine: suppliedEngine }: AppProps) {
             image={image}
             onChoose={() => inputRef.current?.click()}
             onRemove={() => setImage(null)}
+          />
+          <MeditationTimer
+            disabled={!ready}
+            onStart={controls.playAll}
+            onPause={controls.pauseAll}
           />
           <div className="master-controls">
             <div className="master-buttons">
