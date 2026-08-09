@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createMockEngine } from '../test/mockEngine'
+import { AudioEngineLoadError } from '../audio/types'
 import { App } from './App'
 
 const audioFile = (name: string) =>
@@ -209,6 +210,23 @@ describe('App', () => {
     expect(engine.loadTrack).toHaveBeenCalledWith('track-0', file)
     expect(
       await screen.findByText('This audio file could not be read or decoded.')
+    ).toBeInTheDocument()
+  })
+
+  it('shows an unsupported-format error reported by media metadata loading', async () => {
+    const user = userEvent.setup()
+    const engine = createMockEngine()
+    vi.mocked(engine.loadTrack).mockRejectedValueOnce(
+      new AudioEngineLoadError('unsupported-media', 'unsupported')
+    )
+    render(<App engine={engine} />)
+
+    await user.upload(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      audioFile('unsupported.wav')
+    )
+    expect(
+      await screen.findByText('Unsupported audio format.')
     ).toBeInTheDocument()
   })
 

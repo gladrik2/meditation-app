@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { AudioEngine } from '../../audio/types'
+import { AudioEngineLoadError, type AudioEngine } from '../../audio/types'
 
 export interface TrackViewModel {
   id: string
@@ -121,14 +121,18 @@ export function useTracks(engine: AudioEngine) {
                 : track
             )
           )
-        } catch {
+        } catch (error) {
           setTracks((current) =>
             current.map((track) =>
               track.id === id
                 ? {
                     ...track,
                     status: 'error',
-                    error: 'This audio file could not be read or decoded.'
+                    error:
+                      error instanceof AudioEngineLoadError &&
+                      error.category === 'unsupported-media'
+                        ? 'Unsupported audio format.'
+                        : 'This audio file could not be read or decoded.'
                   }
                 : track
             )
