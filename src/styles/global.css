@@ -314,6 +314,24 @@ h1 {
   margin: 14px 0 0 56px;
   grid-template-columns: minmax(110px, auto) minmax(100px, 1fr) 3rem;
 }
+.effect-chance {
+  margin: 12px 0 0 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #56665d;
+  font-size: 0.82rem;
+}
+.effect-chance input {
+  width: 5rem;
+  margin-left: 4px;
+  padding: 6px 8px;
+  border: 1px solid #cfcbbf;
+  border-radius: 7px;
+  background: white;
+  color: #24352c;
+}
 input[type='range'] {
   width: 100%;
   accent-color: #9c7431;

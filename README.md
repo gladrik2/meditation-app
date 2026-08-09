@@ -6,6 +6,7 @@ Local Soundscape is a client-side audio mixer for layering local audio into a pe
 
 - Select multiple local audio files and one optional image through one upload control.
 - Play or pause each track, or start all ready tracks together.
+- Treat audio of 10 seconds or less as a sound effect, with an adjustable random per-second playback chance and a 10-second cooldown.
 - Adjust per-track and master volume and stop all playback.
 - Remove tracks and see clear unsupported/unreadable-file errors.
 - Add one local soundscape image and view it in theater or browser full-screen mode.

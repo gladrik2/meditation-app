@@ -116,6 +116,7 @@ export function App({ engine: suppliedEngine }: AppProps) {
             onToggle={controls.toggleTrack}
             onRemove={controls.removeTrack}
             onVolume={controls.setTrackVolume}
+            onEffectChance={controls.setEffectChance}
           />
         </section>
       </main>

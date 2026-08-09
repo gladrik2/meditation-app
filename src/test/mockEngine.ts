@@ -3,7 +3,7 @@ import type { AudioEngine } from '../audio/types'
 
 export function createMockEngine(): AudioEngine {
   return {
-    loadTrack: vi.fn().mockResolvedValue(undefined),
+    loadTrack: vi.fn().mockResolvedValue(20),
     play: vi.fn().mockResolvedValue(undefined),
     pause: vi.fn(),
     playAll: vi.fn().mockResolvedValue(undefined),

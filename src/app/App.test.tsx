@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createMockEngine } from '../test/mockEngine'
 import { App } from './App'
 
@@ -10,6 +10,11 @@ const imageFile = (name: string) =>
   new File(['not-a-real-image'], name, { type: 'image/jpeg' })
 
 describe('App', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
   it('shows the private empty state initially', () => {
     render(<App engine={createMockEngine()} />)
     expect(screen.getByText('Your soundscape is empty')).toBeInTheDocument()
@@ -140,5 +145,34 @@ describe('App', () => {
         screen.getByRole('button', { name: 'Play rain.wav' })
       ).toBeInTheDocument()
     )
+  })
+
+  it('classifies short audio and plays it by chance with a ten-second cooldown', async () => {
+    vi.useFakeTimers()
+    const engine = createMockEngine()
+    vi.mocked(engine.loadTrack).mockResolvedValue(10)
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+    render(<App engine={engine} />)
+
+    fireEvent.change(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      { target: { files: [audioFile('bell.wav')] } }
+    )
+    await act(async () => {})
+    expect(
+      screen.getByText('Sound effect · random playback')
+    ).toBeInTheDocument()
+    const chance = screen.getByLabelText(/Play chance each second/)
+    expect(chance).toHaveValue(50)
+    fireEvent.change(chance, { target: { value: '25' } })
+    expect(chance).toHaveValue(25)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enable bell.wav' }))
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(engine.play).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(9000)
+    expect(engine.play).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(engine.play).toHaveBeenCalledTimes(2)
   })
 })
