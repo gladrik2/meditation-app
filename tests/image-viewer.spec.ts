@@ -8,6 +8,15 @@ const largeImage = Buffer.from(`
   </svg>
 `)
 
+const portraitViewportImage = Buffer.from(`
+  <svg xmlns="http://www.w3.org/2000/svg" width="1152" height="896" viewBox="0 0 1152 896">
+    <rect width="1152" height="896" fill="#f5d142"/>
+    <rect width="1152" height="16" fill="#d71920"/>
+    <rect y="880" width="1152" height="16" fill="#2a9d8f"/>
+    <text x="576" y="480" text-anchor="middle" font-family="sans-serif" font-size="96">1152 × 896</text>
+  </svg>
+`)
+
 async function uploadLargeImage(page: Page) {
   await page.goto('/')
   await page.locator('#audio-files').setInputFiles({
@@ -40,6 +49,42 @@ test('large image fits within every viewport edge in Theater mode', async ({
   await uploadLargeImage(page)
   await page.getByRole('button', { name: 'Theater mode' }).click()
   await expectImageWithinViewport(page)
+})
+
+test('smaller image expands until its limiting edges meet the viewport', async ({
+  page
+}) => {
+  await page.setViewportSize({ width: 1920, height: 1162 })
+  await page.goto('/')
+  await page.locator('#audio-files').setInputFiles({
+    name: '1152-by-896.svg',
+    mimeType: 'image/svg+xml',
+    buffer: portraitViewportImage
+  })
+  await page.getByRole('button', { name: 'Theater mode' }).click()
+
+  const contentBox = await page
+    .getByRole('dialog')
+    .locator('img')
+    .evaluate((image) => {
+      const rect = image.getBoundingClientRect()
+      const scale = Math.min(
+        rect.width / image.naturalWidth,
+        rect.height / image.naturalHeight
+      )
+      const width = image.naturalWidth * scale
+      const height = image.naturalHeight * scale
+      return {
+        x: rect.x + (rect.width - width) / 2,
+        y: rect.y + (rect.height - height) / 2,
+        width,
+        height
+      }
+    })
+  expect(contentBox.y).toBeCloseTo(0)
+  expect(contentBox.y + contentBox.height).toBeCloseTo(1162)
+  expect(contentBox.x).toBeGreaterThan(0)
+  expect(contentBox.x + contentBox.width).toBeLessThan(1920)
 })
 
 test('Full screen retains Theater mode when fullscreen is unavailable', async ({
