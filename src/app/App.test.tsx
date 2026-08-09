@@ -44,13 +44,21 @@ describe('App', () => {
     expect(screen.getByAltText('Soundscape visual')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Theater mode' }))
+    const viewer = screen.getByRole('dialog', {
+      name: /Soundscape image viewer/
+    })
+    expect(viewer).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Exit view' })).toBeNull()
+    await user.click(viewer.querySelector('img')!)
     expect(
-      screen.getByRole('dialog', { name: 'Soundscape image viewer' })
-    ).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Exit view' }))
-    expect(
-      screen.queryByRole('dialog', { name: 'Soundscape image viewer' })
+      screen.queryByRole('dialog', { name: /Soundscape image viewer/ })
     ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Theater mode' }))
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(
+      screen.queryByRole('dialog', { name: /Soundscape image viewer/ })
+    ).toBeNull()
 
     await user.click(screen.getByRole('button', { name: 'Remove' }))
     expect(screen.queryByText('forest.jpg')).not.toBeInTheDocument()

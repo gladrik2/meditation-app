@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 
 interface SoundscapeImageProps {
   image: File | null
@@ -17,7 +18,7 @@ export function SoundscapeImage({
   )
   const [isTheater, setIsTheater] = useState(false)
   const viewerRef = useRef<HTMLDivElement>(null)
-  const fullscreenRequested = useRef(false)
+  const enteredFullscreen = useRef(false)
 
   useEffect(() => {
     if (imageUrl) return () => URL.revokeObjectURL(imageUrl)
@@ -26,28 +27,34 @@ export function SoundscapeImage({
   useEffect(() => {
     if (!isTheater) return
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !document.fullscreenElement) {
+      if (event.key === 'Escape') setIsTheater(false)
+    }
+    const onFullscreenChange = () => {
+      if (enteredFullscreen.current && !document.fullscreenElement) {
+        enteredFullscreen.current = false
         setIsTheater(false)
       }
     }
     document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [isTheater])
-
-  useEffect(() => {
-    if (!isTheater || !fullscreenRequested.current) return
-    fullscreenRequested.current = false
-    const request = viewerRef.current?.requestFullscreen
-    if (request) {
-      void request.call(viewerRef.current).catch(() => {
-        // Theater mode remains available when fullscreen is denied.
-      })
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('fullscreenchange', onFullscreenChange)
     }
   }, [isTheater])
 
-  const enterFullscreen = () => {
-    fullscreenRequested.current = true
-    setIsTheater(true)
+  const enterFullscreen = async () => {
+    // Keep the fullscreen request in the click gesture while ensuring the
+    // viewer is rendered before asking the browser to display it.
+    flushSync(() => setIsTheater(true))
+    const request = viewerRef.current?.requestFullscreen
+    if (!request) return
+    try {
+      await request.call(viewerRef.current)
+      enteredFullscreen.current = true
+    } catch {
+      // Theater mode remains available when fullscreen is denied.
+    }
   }
 
   const leaveViewer = async () => {
@@ -103,7 +110,7 @@ export function SoundscapeImage({
         <button
           className="primary-control"
           type="button"
-          onClick={enterFullscreen}
+          onClick={() => void enterFullscreen()}
         >
           Full screen
         </button>
@@ -115,16 +122,13 @@ export function SoundscapeImage({
           ref={viewerRef}
           role="dialog"
           aria-modal="true"
-          aria-label="Soundscape image viewer"
+          aria-label="Soundscape image viewer. Click the image or press Escape to exit."
         >
-          <img src={imageUrl} alt="Soundscape visual" />
-          <button
-            type="button"
-            className="viewer-exit"
+          <img
+            src={imageUrl}
+            alt="Soundscape visual"
             onClick={() => void leaveViewer()}
-          >
-            Exit view
-          </button>
+          />
         </div>
       )}
     </section>
