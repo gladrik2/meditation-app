@@ -193,6 +193,11 @@ export class WebAudioEngine implements AudioEngine {
     }
   }
 
+  setTrackLoop(id: TrackId, loop: boolean): void {
+    const track = this.tracks.get(id)
+    if (track) track.element.loop = loop
+  }
+
   setTrackVolume(id: TrackId, volume: number): void {
     const track = this.tracks.get(id)
     if (track) track.gain.gain.value = clampVolume(volume)

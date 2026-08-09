@@ -43,6 +43,7 @@ class FakeAudio extends EventTarget {
   duration = Number.NaN
   currentTime = 0
   ended = false
+  loop = false
   error: MediaError | null = null
   play = vi.fn(async () => {})
   pause = vi.fn()
@@ -104,6 +105,9 @@ describe('WebAudioEngine', () => {
     expect(context.gainNodes[1].connect).toHaveBeenCalledWith(
       context.gainNodes[0]
     )
+
+    engine.setTrackLoop('rain', true)
+    expect(audio.loop).toBe(true)
   })
 
   it('uses media element transport and releases resources', async () => {

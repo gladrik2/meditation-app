@@ -129,13 +129,15 @@ export function useTracks(engine: AudioEngine) {
         ])
         try {
           const duration = await engine.loadTrack(id, file)
+          const isSoundEffect = duration <= SOUND_EFFECT_MAX_SECONDS
+          engine.setTrackLoop(id, !isSoundEffect)
           setTracks((current) =>
             current.map((track) =>
               track.id === id
                 ? {
                     ...track,
                     status: 'ready',
-                    isSoundEffect: duration <= SOUND_EFFECT_MAX_SECONDS
+                    isSoundEffect
                   }
                 : track
             )

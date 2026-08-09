@@ -31,6 +31,7 @@ export function createMockEngine(): MockAudioEngine {
     stopAll: vi.fn(() => {
       for (const id of [...playingIds]) emit({ id, state: 'paused' })
     }),
+    setTrackLoop: vi.fn(),
     setTrackVolume: vi.fn(),
     setMasterVolume: vi.fn(),
     removeTrack: vi.fn(),
