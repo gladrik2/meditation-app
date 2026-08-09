@@ -6,6 +6,7 @@ export interface TrackViewModel {
   name: string
   volume: number
   isPlaying: boolean
+  isEnabled: boolean
   isSoundEffect: boolean
   chance: number
   status: 'loading' | 'ready' | 'error'
@@ -28,13 +29,27 @@ export function useTracks(engine: AudioEngine) {
     tracksRef.current = tracks
   }, [tracks])
 
+  useEffect(
+    () =>
+      engine.subscribe(({ id, state }) => {
+        setTracks((current) =>
+          current.map((track) =>
+            track.id === id
+              ? { ...track, isPlaying: state === 'playing' }
+              : track
+          )
+        )
+      }),
+    [engine]
+  )
+
   useEffect(() => {
     const timer = window.setInterval(() => {
       const now = Date.now()
       for (const track of tracksRef.current) {
         if (
           !track.isSoundEffect ||
-          !track.isPlaying ||
+          !track.isEnabled ||
           track.status !== 'ready' ||
           now - (lastEffectPlay.current.get(track.id) ?? -Infinity) <
             SOUND_EFFECT_COOLDOWN_MS
@@ -43,7 +58,9 @@ export function useTracks(engine: AudioEngine) {
 
         if (Math.floor(Math.random() * track.chance) === 0) {
           lastEffectPlay.current.set(track.id, now)
-          void engine.play(track.id)
+          void engine.play(track.id).catch(() => {
+            lastEffectPlay.current.delete(track.id)
+          })
         }
       }
     }, 1000)
@@ -64,6 +81,7 @@ export function useTracks(engine: AudioEngine) {
               name: file.name,
               volume: 1,
               isPlaying: false,
+              isEnabled: false,
               isSoundEffect: false,
               chance: DEFAULT_CHANCE,
               status: 'error',
@@ -79,6 +97,7 @@ export function useTracks(engine: AudioEngine) {
             name: file.name,
             volume: 1,
             isPlaying: false,
+            isEnabled: false,
             isSoundEffect: false,
             chance: DEFAULT_CHANCE,
             status: 'loading'
@@ -120,13 +139,27 @@ export function useTracks(engine: AudioEngine) {
   )
 
   const toggleTrack = async (track: TrackViewModel) => {
-    if (track.isPlaying) engine.pause(track.id)
-    else if (!track.isSoundEffect) await engine.play(track.id)
-    setTracks((current) =>
-      current.map((item) =>
-        item.id === track.id ? { ...item, isPlaying: !track.isPlaying } : item
+    if (track.isSoundEffect) {
+      setTracks((current) =>
+        current.map((item) =>
+          item.id === track.id ? { ...item, isEnabled: !track.isEnabled } : item
+        )
       )
-    )
+      return
+    }
+
+    if (track.isPlaying) engine.pause(track.id)
+    else {
+      try {
+        await engine.play(track.id)
+      } catch {
+        setTracks((current) =>
+          current.map((item) =>
+            item.id === track.id ? { ...item, isPlaying: false } : item
+          )
+        )
+      }
+    }
   }
 
   const removeTrack = (id: string) => {
@@ -160,19 +193,15 @@ export function useTracks(engine: AudioEngine) {
     const ids = tracks
       .filter((track) => track.status === 'ready' && !track.isSoundEffect)
       .map((track) => track.id)
-    await engine.playAll(ids)
-    setTracks((current) =>
-      current.map((track) =>
-        track.status === 'ready' ? { ...track, isPlaying: true } : track
-      )
-    )
+    try {
+      await engine.playAll(ids)
+    } catch {
+      // Individual media element events remain the source of transport state.
+    }
   }
 
   const stopAll = () => {
     engine.stopAll()
-    setTracks((current) =>
-      current.map((track) => ({ ...track, isPlaying: false }))
-    )
   }
 
   return {

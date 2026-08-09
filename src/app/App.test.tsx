@@ -165,6 +165,33 @@ describe('App', () => {
     )
   })
 
+  it('reflects natural completion and rejected playback promises', async () => {
+    const user = userEvent.setup()
+    const engine = createMockEngine()
+    render(<App engine={engine} />)
+    await user.upload(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      audioFile('rain.wav')
+    )
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Play rain.wav' })
+    )
+    expect(
+      screen.getByRole('button', { name: 'Pause rain.wav' })
+    ).toBeInTheDocument()
+    act(() => engine.emit({ id: 'track-0', state: 'ended' }))
+    expect(
+      screen.getByRole('button', { name: 'Play rain.wav' })
+    ).toBeInTheDocument()
+
+    vi.mocked(engine.play).mockRejectedValueOnce(new Error('blocked'))
+    await user.click(screen.getByRole('button', { name: 'Play rain.wav' }))
+    expect(
+      screen.getByRole('button', { name: 'Play rain.wav' })
+    ).toBeInTheDocument()
+  })
+
   it('classifies short audio and plays it by chance with a ten-second cooldown', async () => {
     vi.useFakeTimers()
     const engine = createMockEngine()
@@ -178,7 +205,7 @@ describe('App', () => {
     )
     await act(async () => {})
     expect(
-      screen.getByText('Sound effect · random playback')
+      screen.getByText('Sound effect · random playback disabled')
     ).toBeInTheDocument()
     const chance = screen.getByLabelText(/Play chance each second/)
     expect(chance).toHaveValue(50)
@@ -186,11 +213,18 @@ describe('App', () => {
     expect(chance).toHaveValue(25)
 
     fireEvent.click(screen.getByRole('button', { name: 'Enable bell.wav' }))
+    expect(
+      screen.getByText('Sound effect · random playback enabled')
+    ).toBeInTheDocument()
     await vi.advanceTimersByTimeAsync(1000)
     expect(engine.play).toHaveBeenCalledTimes(1)
     await vi.advanceTimersByTimeAsync(9000)
     expect(engine.play).toHaveBeenCalledTimes(1)
     await vi.advanceTimersByTimeAsync(1000)
     expect(engine.play).toHaveBeenCalledTimes(2)
+    act(() => engine.emit({ id: 'track-0', state: 'ended' }))
+    expect(
+      screen.getByRole('button', { name: 'Disable bell.wav' })
+    ).toBeInTheDocument()
   })
 })

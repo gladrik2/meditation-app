@@ -13,7 +13,17 @@ export class AudioEngineLoadError extends Error {
   }
 }
 
+export type AudioTransportState = 'playing' | 'paused' | 'ended' | 'error'
+
+export interface AudioTransportEvent {
+  id: TrackId
+  state: AudioTransportState
+}
+
+export type AudioTransportListener = (event: AudioTransportEvent) => void
+
 export interface AudioEngine {
+  subscribe(listener: AudioTransportListener): () => void
   loadTrack(id: TrackId, file: File): Promise<number>
   play(id: TrackId): Promise<void>
   pause(id: TrackId): void
