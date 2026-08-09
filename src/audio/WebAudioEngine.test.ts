@@ -60,7 +60,7 @@ describe('WebAudioEngine', () => {
   it('uses one context, decodes tracks, and routes through track and master gains', async () => {
     const engine = new WebAudioEngine()
     const file = new File(['audio'], 'rain.wav', { type: 'audio/wav' })
-    await engine.loadTrack('rain', file)
+    expect(await engine.loadTrack('rain', file)).toBe(20)
     await engine.loadTrack('wind', file)
     expect(context.decodeAudioData).toHaveBeenCalledTimes(2)
     expect(context.gainNodes).toHaveLength(3)

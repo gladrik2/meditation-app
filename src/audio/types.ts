@@ -1,7 +1,7 @@
 export type TrackId = string
 
 export interface AudioEngine {
-  loadTrack(id: TrackId, file: File): Promise<void>
+  loadTrack(id: TrackId, file: File): Promise<number>
   play(id: TrackId): Promise<void>
   pause(id: TrackId): void
   playAll(ids: TrackId[]): Promise<void>

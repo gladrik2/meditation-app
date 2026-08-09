@@ -6,13 +6,15 @@ interface TrackListProps {
   onToggle: (track: TrackViewModel) => void
   onRemove: (id: string) => void
   onVolume: (id: string, volume: number) => void
+  onEffectChance: (id: string, chance: number) => void
 }
 
 export function TrackList({
   tracks,
   onToggle,
   onRemove,
-  onVolume
+  onVolume,
+  onEffectChance
 }: TrackListProps) {
   if (tracks.length === 0) {
     return (
@@ -36,7 +38,7 @@ export function TrackList({
               <button
                 className="icon-button play-button"
                 type="button"
-                aria-label={`${track.isPlaying ? 'Pause' : 'Play'} ${track.name}`}
+                aria-label={`${track.isPlaying ? (track.isSoundEffect ? 'Disable' : 'Pause') : track.isSoundEffect ? 'Enable' : 'Play'} ${track.name}`}
                 disabled={track.status !== 'ready'}
                 onClick={() => void onToggle(track)}
               >
@@ -44,6 +46,9 @@ export function TrackList({
               </button>
               <div className="track-info">
                 <strong title={track.name}>{track.name}</strong>
+                {track.isSoundEffect && (
+                  <span>Sound effect · random playback</span>
+                )}
                 {track.status === 'loading' && <span>Preparing audio…</span>}
                 {track.error && (
                   <span className="error" role="alert">
@@ -66,6 +71,27 @@ export function TrackList({
               value={track.volume}
               onChange={(volume) => onVolume(track.id, volume)}
             />
+            {track.isSoundEffect && (
+              <label className="effect-chance" htmlFor={`chance-${track.id}`}>
+                Play chance each second
+                <span>
+                  1 in{' '}
+                  <input
+                    id={`chance-${track.id}`}
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={track.chance}
+                    onChange={(event) =>
+                      onEffectChance(
+                        track.id,
+                        event.currentTarget.valueAsNumber
+                      )
+                    }
+                  />
+                </span>
+              </label>
+            )}
           </li>
         ))}
       </ul>

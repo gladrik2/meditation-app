@@ -33,13 +33,14 @@ export class WebAudioEngine implements AudioEngine {
     return context
   }
 
-  async loadTrack(id: TrackId, file: File): Promise<void> {
+  async loadTrack(id: TrackId, file: File): Promise<number> {
     const context = this.getContext()
     const data = await file.arrayBuffer()
     const buffer = await context.decodeAudioData(data)
     const gain = context.createGain()
     gain.connect(this.masterGain!)
     this.tracks.set(id, { buffer, gain, source: null, offset: 0, startedAt: 0 })
+    return buffer.duration
   }
 
   private startTrack(
