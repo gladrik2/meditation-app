@@ -6,6 +6,8 @@ import { App } from './App'
 
 const audioFile = (name: string) =>
   new File(['not-real-audio'], name, { type: 'audio/wav' })
+const imageFile = (name: string) =>
+  new File(['not-a-real-image'], name, { type: 'image/jpeg' })
 
 describe('App', () => {
   it('shows the private empty state initially', () => {
@@ -28,6 +30,54 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Remove rain.wav' }))
     expect(screen.queryByText('rain.wav')).not.toBeInTheDocument()
     expect(engine.removeTrack).toHaveBeenCalledWith('track-0')
+  })
+
+  it('adds one image and shows it by itself in theater mode', async () => {
+    const user = userEvent.setup()
+    render(<App engine={createMockEngine()} />)
+
+    await user.upload(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      imageFile('forest.jpg')
+    )
+    expect(screen.getByText('forest.jpg')).toBeInTheDocument()
+    expect(screen.getByAltText('Soundscape visual')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Theater mode' }))
+    const viewer = screen.getByRole('dialog', {
+      name: /Soundscape image viewer/
+    })
+    expect(viewer).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Exit view' })).toBeNull()
+    await user.click(viewer.querySelector('img')!)
+    expect(
+      screen.queryByRole('dialog', { name: /Soundscape image viewer/ })
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Theater mode' }))
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(
+      screen.queryByRole('dialog', { name: /Soundscape image viewer/ })
+    ).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: 'Remove' }))
+    expect(screen.queryByText('forest.jpg')).not.toBeInTheDocument()
+  })
+
+  it('sorts audio and image files selected through the same upload control', async () => {
+    const user = userEvent.setup()
+    const engine = createMockEngine()
+    render(<App engine={engine} />)
+
+    await user.upload(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      [audioFile('rain.wav'), imageFile('forest.jpg'), audioFile('birds.wav')]
+    )
+
+    expect(await screen.findByText('rain.wav')).toBeInTheDocument()
+    expect(screen.getByText('birds.wav')).toBeInTheDocument()
+    expect(screen.getByText('forest.jpg')).toBeInTheDocument()
+    expect(engine.loadTrack).toHaveBeenCalledTimes(2)
   })
 
   it('updates per-track and master volume', async () => {
