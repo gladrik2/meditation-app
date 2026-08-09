@@ -33,6 +33,8 @@ describe('App', () => {
     expect(await screen.findByText('rain.wav')).toBeInTheDocument()
     expect(screen.getByText('birds.wav')).toBeInTheDocument()
     expect(engine.loadTrack).toHaveBeenCalledTimes(2)
+    expect(engine.setTrackLoop).toHaveBeenNthCalledWith(1, 'track-0', true)
+    expect(engine.setTrackLoop).toHaveBeenNthCalledWith(2, 'track-1', true)
     await user.click(screen.getByRole('button', { name: 'Remove rain.wav' }))
     expect(screen.queryByText('rain.wav')).not.toBeInTheDocument()
     expect(engine.removeTrack).toHaveBeenCalledWith('track-0')
@@ -296,6 +298,7 @@ describe('App', () => {
     expect(
       screen.getByText('Sound effect · random playback disabled')
     ).toBeInTheDocument()
+    expect(engine.setTrackLoop).toHaveBeenCalledWith('track-0', false)
     const chance = screen.getByLabelText(/Play chance each second/)
     expect(chance).toHaveValue(50)
     fireEvent.change(chance, { target: { value: '25' } })
