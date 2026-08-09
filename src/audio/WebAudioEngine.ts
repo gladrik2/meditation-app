@@ -2,6 +2,7 @@ import {
   AudioEngineLoadError,
   type AudioEngine,
   type AudioLoadErrorCategory,
+  type AudioTransportListener,
   type TrackId
 } from './types'
 
@@ -11,6 +12,7 @@ interface EngineTrack {
   element: HTMLAudioElement
   mediaSource: MediaElementAudioSourceNode
   gain: GainNode
+  removeTransportListeners: () => void
 }
 
 interface PendingTrack {
@@ -26,7 +28,20 @@ export class WebAudioEngine implements AudioEngine {
   private masterGain: GainNode | null = null
   private readonly tracks = new Map<TrackId, EngineTrack>()
   private readonly pendingTracks = new Map<TrackId, PendingTrack>()
+  private readonly listeners = new Set<AudioTransportListener>()
   private disposed = false
+
+  subscribe(listener: AudioTransportListener): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
+  private emit(
+    id: TrackId,
+    state: Parameters<AudioTransportListener>[0]['state']
+  ) {
+    for (const listener of this.listeners) listener({ id, state })
+  }
 
   private getContext(): AudioContext {
     if (this.disposed) throw new Error('The audio engine has been disposed.')
@@ -92,7 +107,28 @@ export class WebAudioEngine implements AudioEngine {
           settled = true
           cleanUpListeners()
           this.pendingTracks.delete(id)
-          this.tracks.set(id, { file, url, element, mediaSource, gain })
+          const onPlay = () => this.emit(id, 'playing')
+          const onPause = () => this.emit(id, 'paused')
+          const onEnded = () => this.emit(id, 'ended')
+          const onTransportError = () => this.emit(id, 'error')
+          element.addEventListener('play', onPlay)
+          element.addEventListener('pause', onPause)
+          element.addEventListener('ended', onEnded)
+          element.addEventListener('error', onTransportError)
+          const removeTransportListeners = () => {
+            element.removeEventListener('play', onPlay)
+            element.removeEventListener('pause', onPause)
+            element.removeEventListener('ended', onEnded)
+            element.removeEventListener('error', onTransportError)
+          }
+          this.tracks.set(id, {
+            file,
+            url,
+            element,
+            mediaSource,
+            gain,
+            removeTransportListeners
+          })
           resolve(element.duration)
         } catch {
           mediaSource?.disconnect()
@@ -171,6 +207,7 @@ export class WebAudioEngine implements AudioEngine {
     this.pendingTracks.get(id)?.cancel()
     const track = this.tracks.get(id)
     if (!track) return
+    track.removeTransportListeners()
     track.element.pause()
     track.element.removeAttribute('src')
     track.element.load()
@@ -190,5 +227,6 @@ export class WebAudioEngine implements AudioEngine {
       await this.context.close()
     this.context = null
     this.masterGain = null
+    this.listeners.clear()
   }
 }

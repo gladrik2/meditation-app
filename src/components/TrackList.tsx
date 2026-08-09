@@ -38,16 +38,27 @@ export function TrackList({
               <button
                 className="icon-button play-button"
                 type="button"
-                aria-label={`${track.isPlaying ? (track.isSoundEffect ? 'Disable' : 'Pause') : track.isSoundEffect ? 'Enable' : 'Play'} ${track.name}`}
+                aria-label={`${track.isSoundEffect ? (track.isEnabled ? 'Disable' : 'Enable') : track.isPlaying ? 'Pause' : 'Play'} ${track.name}`}
                 disabled={track.status !== 'ready'}
                 onClick={() => void onToggle(track)}
               >
-                {track.status === 'loading' ? '…' : track.isPlaying ? 'Ⅱ' : '▶'}
+                {track.status === 'loading'
+                  ? '…'
+                  : track.isSoundEffect
+                    ? track.isEnabled
+                      ? 'Ⅱ'
+                      : '▶'
+                    : track.isPlaying
+                      ? 'Ⅱ'
+                      : '▶'}
               </button>
               <div className="track-info">
                 <strong title={track.name}>{track.name}</strong>
                 {track.isSoundEffect && (
-                  <span>Sound effect · random playback</span>
+                  <span>
+                    Sound effect · random playback{' '}
+                    {track.isEnabled ? 'enabled' : 'disabled'}
+                  </span>
                 )}
                 {track.status === 'loading' && <span>Preparing audio…</span>}
                 {track.error && (

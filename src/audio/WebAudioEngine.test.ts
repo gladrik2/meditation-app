@@ -108,6 +108,8 @@ describe('WebAudioEngine', () => {
 
   it('uses media element transport and releases resources', async () => {
     const engine = new WebAudioEngine()
+    const listener = vi.fn()
+    engine.subscribe(listener)
     const file = new File(['audio'], 'rain.wav', { type: 'audio/wav' })
     const firstLoad = engine.loadTrack('rain', file)
     const rain = FakeAudio.instances[0]
@@ -122,16 +124,27 @@ describe('WebAudioEngine', () => {
     expect(context.resume).toHaveBeenCalledOnce()
     expect(rain.play).toHaveBeenCalledOnce()
     expect(wind.play).toHaveBeenCalledOnce()
+    rain.dispatchEvent(new Event('play'))
+    expect(listener).toHaveBeenLastCalledWith({ id: 'rain', state: 'playing' })
     rain.currentTime = 8
     engine.pause('rain')
+    rain.dispatchEvent(new Event('pause'))
     expect(rain.pause).toHaveBeenCalledOnce()
     expect(rain.currentTime).toBe(8)
+    expect(listener).toHaveBeenLastCalledWith({ id: 'rain', state: 'paused' })
+    rain.dispatchEvent(new Event('ended'))
+    expect(listener).toHaveBeenLastCalledWith({ id: 'rain', state: 'ended' })
+    wind.dispatchEvent(new Event('error'))
+    expect(listener).toHaveBeenLastCalledWith({ id: 'wind', state: 'error' })
     engine.stopAll()
     expect(rain.currentTime).toBe(0)
     expect(wind.currentTime).toBe(0)
 
     engine.removeTrack('rain')
     expect(rain.removeAttribute).toHaveBeenCalledWith('src')
+    listener.mockClear()
+    rain.dispatchEvent(new Event('play'))
+    expect(listener).not.toHaveBeenCalled()
     expect(context.mediaSources[0].disconnect).toHaveBeenCalledOnce()
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:track')
     await engine.dispose()
