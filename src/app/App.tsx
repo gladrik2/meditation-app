@@ -47,7 +47,7 @@ export function App({ engine: suppliedEngine }: AppProps) {
             className="visually-hidden"
             id="audio-files"
             type="file"
-            accept="audio/*,image/*"
+            accept="audio/*,audio/ogg,audio/opus,audio/webm,.opus,.ogg,image/*"
             multiple
             onChange={(event) => {
               const files = Array.from(event.currentTarget.files ?? [])

@@ -123,6 +123,60 @@ describe('App', () => {
     ).toBeInTheDocument()
   })
 
+  it.each([
+    ['an empty MIME type', ''],
+    ['a generic MIME type', 'application/octet-stream']
+  ])('loads an Opus candidate with %s', async (_description, type) => {
+    const user = userEvent.setup({ applyAccept: false })
+    const engine = createMockEngine()
+    render(<App engine={engine} />)
+    const file = new File(['opus-candidate'], 'meditation.opus', { type })
+
+    await user.upload(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      file
+    )
+
+    expect(await screen.findByText('meditation.opus')).toBeInTheDocument()
+    expect(engine.loadTrack).toHaveBeenCalledWith('track-0', file)
+  })
+
+  it('rejects ordinary non-audio input without attempting playback metadata', async () => {
+    const user = userEvent.setup({ applyAccept: false })
+    const engine = createMockEngine()
+    render(<App engine={engine} />)
+
+    await user.upload(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      new File(['text'], 'notes.txt', { type: 'text/plain' })
+    )
+
+    expect(
+      await screen.findByText('Unsupported file type.')
+    ).toBeInTheDocument()
+    expect(engine.loadTrack).not.toHaveBeenCalled()
+  })
+
+  it('reports a backend load failure for an Opus candidate as unreadable audio', async () => {
+    const user = userEvent.setup({ applyAccept: false })
+    const engine = createMockEngine()
+    vi.mocked(engine.loadTrack).mockRejectedValueOnce(
+      new Error('media element failed to load metadata')
+    )
+    render(<App engine={engine} />)
+    const file = new File(['unsupported-bytes'], 'broken.opus', { type: '' })
+
+    await user.upload(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      file
+    )
+
+    expect(engine.loadTrack).toHaveBeenCalledWith('track-0', file)
+    expect(
+      await screen.findByText('This audio file could not be read or decoded.')
+    ).toBeInTheDocument()
+  })
+
   it('plays, pauses, and controls all ready tracks through the engine', async () => {
     const user = userEvent.setup()
     const engine = createMockEngine()

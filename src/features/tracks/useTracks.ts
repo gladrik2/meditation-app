@@ -12,7 +12,23 @@ export interface TrackViewModel {
   error?: string
 }
 
-const acceptedType = (file: File) => file.type.startsWith('audio/')
+const AUDIO_EXTENSIONS = new Set([
+  'opus',
+  'ogg',
+  'oga',
+  'webm',
+  'mp3',
+  'm4a',
+  'aac',
+  'wav',
+  'flac'
+])
+
+const acceptedType = (file: File) => {
+  if (file.type.toLowerCase().startsWith('audio/')) return true
+  const extension = file.name.toLowerCase().match(/\.([^.]+)$/)?.[1]
+  return extension !== undefined && AUDIO_EXTENSIONS.has(extension)
+}
 const SOUND_EFFECT_MAX_SECONDS = 10
 const SOUND_EFFECT_COOLDOWN_MS = 10_000
 const DEFAULT_CHANCE = 50
