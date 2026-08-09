@@ -125,12 +125,47 @@ describe('App', () => {
 
   it.each([
     ['an empty MIME type', ''],
-    ['a generic MIME type', 'application/octet-stream']
+    ['a generic MIME type', 'application/octet-stream'],
+    ['an Ogg application MIME type', 'application/ogg']
   ])('loads an Opus candidate with %s', async (_description, type) => {
     const user = userEvent.setup({ applyAccept: false })
     const engine = createMockEngine()
     render(<App engine={engine} />)
     const file = new File(['opus-candidate'], 'meditation.opus', { type })
+
+    await user.upload(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      file
+    )
+
+    expect(await screen.findByText('meditation.opus')).toBeInTheDocument()
+    expect(engine.loadTrack).toHaveBeenCalledWith('track-0', file)
+  })
+
+  it('loads an extensionless candidate with a generic MIME type', async () => {
+    const user = userEvent.setup({ applyAccept: false })
+    const engine = createMockEngine()
+    render(<App engine={engine} />)
+    const file = new File(['audio-candidate'], 'provider-download', {
+      type: 'application/octet-stream'
+    })
+
+    await user.upload(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      file
+    )
+
+    expect(await screen.findByText('provider-download')).toBeInTheDocument()
+    expect(engine.loadTrack).toHaveBeenCalledWith('track-0', file)
+  })
+
+  it('uses a known audio extension as a positive hint over a non-audio MIME type', async () => {
+    const user = userEvent.setup({ applyAccept: false })
+    const engine = createMockEngine()
+    render(<App engine={engine} />)
+    const file = new File(['opus-candidate'], 'meditation.opus', {
+      type: 'text/plain'
+    })
 
     await user.upload(
       document.querySelector<HTMLInputElement>('#audio-files')!,

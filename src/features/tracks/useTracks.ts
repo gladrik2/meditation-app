@@ -23,9 +23,17 @@ const AUDIO_EXTENSIONS = new Set([
   'wav',
   'flac'
 ])
+const AMBIGUOUS_AUDIO_MIME_TYPES = new Set([
+  '',
+  'application/octet-stream',
+  'application/ogg',
+  'application/x-ogg'
+])
 
-const acceptedType = (file: File) => {
-  if (file.type.toLowerCase().startsWith('audio/')) return true
+const isAudioCandidate = (file: File) => {
+  const mimeType = file.type.toLowerCase().split(';', 1)[0].trim()
+  if (mimeType.startsWith('audio/') || AMBIGUOUS_AUDIO_MIME_TYPES.has(mimeType))
+    return true
   const extension = file.name.toLowerCase().match(/\.([^.]+)$/)?.[1]
   return extension !== undefined && AUDIO_EXTENSIONS.has(extension)
 }
@@ -72,7 +80,7 @@ export function useTracks(engine: AudioEngine) {
     async (files: FileList | File[]) => {
       for (const file of Array.from(files)) {
         const id = `track-${counter.current++}`
-        if (!acceptedType(file)) {
+        if (!isAudioCandidate(file)) {
           setTracks((current) => [
             ...current,
             {
