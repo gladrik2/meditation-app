@@ -12,7 +12,31 @@ export interface TrackViewModel {
   error?: string
 }
 
-const acceptedType = (file: File) => file.type.startsWith('audio/')
+const AUDIO_EXTENSIONS = new Set([
+  'opus',
+  'ogg',
+  'oga',
+  'webm',
+  'mp3',
+  'm4a',
+  'aac',
+  'wav',
+  'flac'
+])
+const AMBIGUOUS_AUDIO_MIME_TYPES = new Set([
+  '',
+  'application/octet-stream',
+  'application/ogg',
+  'application/x-ogg'
+])
+
+const isAudioCandidate = (file: File) => {
+  const mimeType = file.type.toLowerCase().split(';', 1)[0].trim()
+  if (mimeType.startsWith('audio/') || AMBIGUOUS_AUDIO_MIME_TYPES.has(mimeType))
+    return true
+  const extension = file.name.toLowerCase().match(/\.([^.]+)$/)?.[1]
+  return extension !== undefined && AUDIO_EXTENSIONS.has(extension)
+}
 const SOUND_EFFECT_MAX_SECONDS = 10
 const SOUND_EFFECT_COOLDOWN_MS = 10_000
 const DEFAULT_CHANCE = 50
@@ -56,7 +80,7 @@ export function useTracks(engine: AudioEngine) {
     async (files: FileList | File[]) => {
       for (const file of Array.from(files)) {
         const id = `track-${counter.current++}`
-        if (!acceptedType(file)) {
+        if (!isAudioCandidate(file)) {
           setTracks((current) => [
             ...current,
             {
