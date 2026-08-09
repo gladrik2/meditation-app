@@ -1,11 +1,22 @@
-import type { AudioEngine, TrackId } from './types'
+import {
+  AudioEngineLoadError,
+  type AudioEngine,
+  type AudioLoadErrorCategory,
+  type TrackId
+} from './types'
 
 interface EngineTrack {
-  buffer: AudioBuffer
+  file: File
+  url: string
+  element: HTMLAudioElement
+  mediaSource: MediaElementAudioSourceNode
   gain: GainNode
-  source: AudioBufferSourceNode | null
-  offset: number
-  startedAt: number
+}
+
+interface PendingTrack {
+  element: HTMLAudioElement
+  url: string
+  cancel: () => void
 }
 
 const clampVolume = (value: number) => Math.min(1, Math.max(0, value))
@@ -14,8 +25,11 @@ export class WebAudioEngine implements AudioEngine {
   private context: AudioContext | null = null
   private masterGain: GainNode | null = null
   private readonly tracks = new Map<TrackId, EngineTrack>()
+  private readonly pendingTracks = new Map<TrackId, PendingTrack>()
+  private disposed = false
 
   private getContext(): AudioContext {
+    if (this.disposed) throw new Error('The audio engine has been disposed.')
     if (!this.context) {
       const AudioContextConstructor = window.AudioContext
       if (!AudioContextConstructor)
@@ -35,64 +49,111 @@ export class WebAudioEngine implements AudioEngine {
 
   async loadTrack(id: TrackId, file: File): Promise<number> {
     const context = this.getContext()
-    const data = await file.arrayBuffer()
-    const buffer = await context.decodeAudioData(data)
-    const gain = context.createGain()
-    gain.connect(this.masterGain!)
-    this.tracks.set(id, { buffer, gain, source: null, offset: 0, startedAt: 0 })
-    return buffer.duration
-  }
+    this.removeTrack(id)
 
-  private startTrack(
-    id: TrackId,
-    context: AudioContext,
-    when = context.currentTime
-  ): void {
-    const track = this.tracks.get(id)
-    if (!track || track.source) return
-    const source = context.createBufferSource()
-    source.buffer = track.buffer
-    source.connect(track.gain)
-    track.source = source
-    track.startedAt = when
-    // BufferSource nodes are single-use, so pausing stops this node and playing creates another.
-    source.start(when, track.offset)
-    source.onended = () => {
-      if (track.source !== source) return
-      source.disconnect()
-      track.source = null
-      track.offset = 0
-    }
+    const url = URL.createObjectURL(file)
+    const element = new Audio()
+    element.preload = 'metadata'
+
+    return new Promise<number>((resolve, reject) => {
+      let settled = false
+
+      const cleanUpListeners = () => {
+        element.removeEventListener('loadedmetadata', onMetadata)
+        element.removeEventListener('durationchange', onMetadata)
+        element.removeEventListener('error', onError)
+      }
+      const releaseElement = () => {
+        element.pause()
+        element.removeAttribute('src')
+        element.load()
+        URL.revokeObjectURL(url)
+      }
+      const fail = (category: AudioLoadErrorCategory, message: string) => {
+        if (settled) return
+        settled = true
+        cleanUpListeners()
+        if (this.pendingTracks.get(id)?.element === element)
+          this.pendingTracks.delete(id)
+        releaseElement()
+        reject(new AudioEngineLoadError(category, message))
+      }
+      const onMetadata = () => {
+        if (!Number.isFinite(element.duration) || element.duration < 0) return
+        if (settled || this.pendingTracks.get(id)?.element !== element) return
+
+        let gain: GainNode | undefined
+        let mediaSource: MediaElementAudioSourceNode | undefined
+        try {
+          gain = context.createGain()
+          mediaSource = context.createMediaElementSource(element)
+          mediaSource.connect(gain)
+          gain.connect(this.masterGain!)
+          settled = true
+          cleanUpListeners()
+          this.pendingTracks.delete(id)
+          this.tracks.set(id, { file, url, element, mediaSource, gain })
+          resolve(element.duration)
+        } catch {
+          mediaSource?.disconnect()
+          gain?.disconnect()
+          fail(
+            'metadata-read-failure',
+            'The audio media source could not be created.'
+          )
+        }
+      }
+      const onError = () => {
+        // MEDIA_ERR_SRC_NOT_SUPPORTED is specified as code 4. Comparing the
+        // code also works in browsers that do not expose MediaError globally.
+        const unsupported = element.error?.code === 4
+        fail(
+          unsupported ? 'unsupported-media' : 'metadata-read-failure',
+          unsupported
+            ? 'The audio format is not supported.'
+            : 'The audio metadata could not be read.'
+        )
+      }
+      const cancel = () =>
+        fail('metadata-read-failure', 'Audio loading was cancelled.')
+
+      this.pendingTracks.set(id, { element, url, cancel })
+      element.addEventListener('loadedmetadata', onMetadata)
+      element.addEventListener('durationchange', onMetadata)
+      element.addEventListener('error', onError)
+      element.src = url
+      element.load()
+    })
   }
 
   async play(id: TrackId): Promise<void> {
-    const context = await this.resume()
-    this.startTrack(id, context)
+    await this.resume()
+    const track = this.tracks.get(id)
+    if (!track) return
+    if (track.element.ended) track.element.currentTime = 0
+    await track.element.play()
   }
 
   pause(id: TrackId): void {
-    const track = this.tracks.get(id)
-    if (!track?.source || !this.context) return
-    track.offset =
-      (track.offset + this.context.currentTime - track.startedAt) %
-      track.buffer.duration
-    const source = track.source
-    track.source = null
-    source.onended = null
-    source.stop()
-    source.disconnect()
+    this.tracks.get(id)?.element.pause()
   }
 
   async playAll(ids: TrackId[]): Promise<void> {
-    const context = await this.resume()
-    const when = context.currentTime + 0.02
-    ids.forEach((id) => this.startTrack(id, context, when))
+    await this.resume()
+    await Promise.all(
+      ids.map(async (id) => {
+        const track = this.tracks.get(id)
+        if (!track) return
+        if (track.element.ended) track.element.currentTime = 0
+        await track.element.play()
+      })
+    )
   }
 
   stopAll(): void {
-    for (const [id, track] of this.tracks) {
-      this.pause(id)
-      track.offset = 0
+    for (const track of this.tracks.values()) {
+      track.element.pause()
+      track.element.currentTime = 0
     }
   }
 
@@ -107,17 +168,23 @@ export class WebAudioEngine implements AudioEngine {
   }
 
   removeTrack(id: TrackId): void {
+    this.pendingTracks.get(id)?.cancel()
     const track = this.tracks.get(id)
     if (!track) return
-    this.pause(id)
+    track.element.pause()
+    track.element.removeAttribute('src')
+    track.element.load()
+    track.mediaSource.disconnect()
     track.gain.disconnect()
+    URL.revokeObjectURL(track.url)
     this.tracks.delete(id)
   }
 
   async dispose(): Promise<void> {
-    this.stopAll()
-    for (const track of this.tracks.values()) track.gain.disconnect()
-    this.tracks.clear()
+    if (this.disposed) return
+    this.disposed = true
+    for (const pending of [...this.pendingTracks.values()]) pending.cancel()
+    for (const id of [...this.tracks.keys()]) this.removeTrack(id)
     this.masterGain?.disconnect()
     if (this.context && this.context.state !== 'closed')
       await this.context.close()
