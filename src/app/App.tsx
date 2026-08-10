@@ -2,7 +2,11 @@ import { useMemo, useRef, useState } from 'react'
 import { WebAudioEngine } from '../audio/WebAudioEngine'
 import type { AudioEngine } from '../audio/types'
 import { TrackList } from '../components/TrackList'
-import { SoundscapeImage } from '../components/SoundscapeImage'
+import { MeditationTimer } from '../components/MeditationTimer'
+import {
+  SoundscapeImage,
+  type SoundscapeImageHandle
+} from '../components/SoundscapeImage'
 import { VolumeControl } from '../components/VolumeControl'
 import { useTracks } from '../features/tracks/useTracks'
 
@@ -16,6 +20,7 @@ export function App({ engine: suppliedEngine }: AppProps) {
     [suppliedEngine]
   )
   const inputRef = useRef<HTMLInputElement>(null)
+  const imageRef = useRef<SoundscapeImageHandle>(null)
   const [image, setImage] = useState<File | null>(null)
   const controls = useTracks(engine)
   const ready = controls.tracks.some((track) => track.status === 'ready')
@@ -81,9 +86,20 @@ export function App({ engine: suppliedEngine }: AppProps) {
 
         <section className="mixer" aria-label="Soundscape mixer">
           <SoundscapeImage
+            ref={imageRef}
             image={image}
             onChoose={() => inputRef.current?.click()}
             onRemove={() => setImage(null)}
+          />
+          <MeditationTimer
+            onStartWithMedia={() => {
+              imageRef.current?.enterFullscreen()
+              return controls.playAll()
+            }}
+            onComplete={() => {
+              controls.stopAll()
+              imageRef.current?.showCompletionBlackout()
+            }}
           />
           <div className="master-controls">
             <div className="master-buttons">

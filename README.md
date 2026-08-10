@@ -49,6 +49,10 @@ npm run build
 
 Build output is written to ignored `dist/`.
 
+Application-provided audio assets belong in `public/audio/built-in/`. See the
+README in that directory for URL, licensing, format, and offline-cache
+guidance. User-selected audio must never be placed there or committed.
+
 ## PWA behavior
 
 The generated service worker precaches only the application shell (`html`, JavaScript, CSS, and SVG). Updates are activated automatically. After one successful online visit, the shell can launch offline; selecting and playing files remains local. Browser support for install prompts and SVG manifest icons varies, but neither affects core playback.

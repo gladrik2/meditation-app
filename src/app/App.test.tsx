@@ -256,6 +256,141 @@ describe('App', () => {
     )
   })
 
+  it('enables random sound effects with Play All and disables them with Stop All', async () => {
+    const user = userEvent.setup()
+    const engine = createMockEngine()
+    vi.mocked(engine.loadTrack).mockResolvedValueOnce(5)
+    render(<App engine={engine} />)
+    await user.upload(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      audioFile('bell.wav')
+    )
+
+    expect(
+      screen.getByText('Sound effect · random playback disabled')
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Play All/ }))
+    expect(
+      screen.getByText('Sound effect · random playback enabled')
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Stop All/ }))
+    expect(
+      screen.getByText('Sound effect · random playback disabled')
+    ).toBeInTheDocument()
+    expect(engine.stopAll).toHaveBeenCalled()
+  })
+
+  it('starts, pauses, resumes, and resets a count-up meditation', async () => {
+    vi.useFakeTimers()
+    const engine = createMockEngine()
+    render(<App engine={engine} />)
+    fireEvent.change(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      { target: { files: [audioFile('rain.wav')] } }
+    )
+    await act(async () => {})
+
+    const start = screen.getByRole('button', { name: /Start Meditation/ })
+    fireEvent.click(start)
+    expect(engine.playAll).not.toHaveBeenCalled()
+    await act(() => vi.advanceTimersByTimeAsync(5000))
+    expect(screen.getByText('00:05')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ⅱ Pause' }))
+    expect(engine.pause).not.toHaveBeenCalled()
+    await act(() => vi.advanceTimersByTimeAsync(3000))
+    expect(screen.getByText('00:05')).toBeInTheDocument()
+
+    fireEvent.click(start)
+    await act(() => vi.advanceTimersByTimeAsync(2000))
+    expect(screen.getByText('00:07')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Reset/ }))
+    expect(screen.getByText('00:00')).toBeInTheDocument()
+  })
+
+  it('counts down for the selected duration without controlling audio', async () => {
+    vi.useFakeTimers()
+    const engine = createMockEngine()
+    render(<App engine={engine} />)
+    fireEvent.change(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      { target: { files: [audioFile('rain.wav')] } }
+    )
+    await act(async () => {})
+
+    fireEvent.change(screen.getByLabelText('Timer type'), {
+      target: { value: 'countdown' }
+    })
+    fireEvent.change(screen.getByLabelText('Minutes'), {
+      target: { value: '1' }
+    })
+    expect(screen.getByText('01:00')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Start Meditation/ }))
+    await act(() => vi.advanceTimersByTimeAsync(60_000))
+
+    expect(screen.getByText('00:00')).toBeInTheDocument()
+    expect(screen.getByText('Meditation completed')).toBeInTheDocument()
+    expect(engine.playAll).not.toHaveBeenCalled()
+    expect(engine.pause).not.toHaveBeenCalled()
+    expect(engine.stopAll).toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Ⅱ Pause' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: /Reset/ }))
+    expect(screen.queryByText('Meditation completed')).not.toBeInTheDocument()
+  })
+
+  it('blacks out an open image viewer when a countdown completes', async () => {
+    vi.useFakeTimers()
+    render(<App engine={createMockEngine()} />)
+    fireEvent.change(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      { target: { files: [imageFile('forest.jpg')] } }
+    )
+    await act(async () => {})
+    fireEvent.click(screen.getByRole('button', { name: 'Theater mode' }))
+    expect(screen.getByRole('dialog').querySelector('img')).not.toBeNull()
+
+    fireEvent.change(screen.getByLabelText('Timer type'), {
+      target: { value: 'countdown' }
+    })
+    fireEvent.change(screen.getByLabelText('Minutes'), {
+      target: { value: '1' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Start Meditation/ }))
+    await act(() => vi.advanceTimersByTimeAsync(60_000))
+
+    const blackout = screen.getByRole('dialog', {
+      name: /Meditation completed/
+    })
+    expect(blackout).toHaveClass('image-viewer-complete')
+    expect(blackout.querySelector('img')).toBeNull()
+    fireEvent.click(blackout)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('optionally starts audio and full screens the image with meditation', async () => {
+    const user = userEvent.setup()
+    const engine = createMockEngine()
+    render(<App engine={engine} />)
+    await user.upload(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      [audioFile('rain.wav'), imageFile('forest.jpg')]
+    )
+
+    await user.click(
+      screen.getByLabelText(
+        'Play all audio and full screen the image when meditation starts'
+      )
+    )
+    await user.click(screen.getByRole('button', { name: /Start Meditation/ }))
+
+    expect(engine.playAll).toHaveBeenCalledWith(['track-0'])
+    expect(
+      screen.getByRole('dialog', { name: /Soundscape image viewer/ })
+    ).toBeInTheDocument()
+  })
+
   it('reflects natural completion and rejected playback promises', async () => {
     const user = userEvent.setup()
     const engine = createMockEngine()
