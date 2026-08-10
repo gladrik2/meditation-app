@@ -268,12 +268,12 @@ describe('App', () => {
 
     const start = screen.getByRole('button', { name: /Start Meditation/ })
     fireEvent.click(start)
-    expect(engine.playAll).toHaveBeenCalledWith(['track-0'])
+    expect(engine.playAll).not.toHaveBeenCalled()
     await act(() => vi.advanceTimersByTimeAsync(5000))
     expect(screen.getByText('00:05')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Ⅱ Pause' }))
-    expect(engine.pause).toHaveBeenCalledWith('track-0')
+    expect(engine.pause).not.toHaveBeenCalled()
     await act(() => vi.advanceTimersByTimeAsync(3000))
     expect(screen.getByText('00:05')).toBeInTheDocument()
 
@@ -284,7 +284,7 @@ describe('App', () => {
     expect(screen.getByText('00:00')).toBeInTheDocument()
   })
 
-  it('counts down for the selected duration and pauses audio at zero', async () => {
+  it('counts down for the selected duration without controlling audio', async () => {
     vi.useFakeTimers()
     const engine = createMockEngine()
     render(<App engine={engine} />)
@@ -305,8 +305,31 @@ describe('App', () => {
     await act(() => vi.advanceTimersByTimeAsync(60_000))
 
     expect(screen.getByText('00:00')).toBeInTheDocument()
-    expect(engine.pause).toHaveBeenCalledWith('track-0')
+    expect(engine.playAll).not.toHaveBeenCalled()
+    expect(engine.pause).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Ⅱ Pause' })).toBeDisabled()
+  })
+
+  it('optionally starts audio and full screens the image with meditation', async () => {
+    const user = userEvent.setup()
+    const engine = createMockEngine()
+    render(<App engine={engine} />)
+    await user.upload(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      [audioFile('rain.wav'), imageFile('forest.jpg')]
+    )
+
+    await user.click(
+      screen.getByLabelText(
+        'Play all audio and full screen the image when meditation starts'
+      )
+    )
+    await user.click(screen.getByRole('button', { name: /Start Meditation/ }))
+
+    expect(engine.playAll).toHaveBeenCalledWith(['track-0'])
+    expect(
+      screen.getByRole('dialog', { name: /Soundscape image viewer/ })
+    ).toBeInTheDocument()
   })
 
   it('reflects natural completion and rejected playback promises', async () => {

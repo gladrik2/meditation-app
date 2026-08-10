@@ -3,9 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 type TimerMode = 'stopwatch' | 'countdown'
 
 interface MeditationTimerProps {
-  disabled: boolean
-  onStart: () => void | Promise<void>
-  onPause: () => void
+  onStartWithMedia: () => void | Promise<void>
 }
 
 const formatTime = (totalSeconds: number) => {
@@ -16,15 +14,12 @@ const formatTime = (totalSeconds: number) => {
   return hours > 0 ? `${hours}:${parts.join(':')}` : parts.join(':')
 }
 
-export function MeditationTimer({
-  disabled,
-  onStart,
-  onPause
-}: MeditationTimerProps) {
+export function MeditationTimer({ onStartWithMedia }: MeditationTimerProps) {
   const [mode, setMode] = useState<TimerMode>('stopwatch')
   const [minutes, setMinutes] = useState(10)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [isRunning, setIsRunning] = useState(false)
+  const [startMedia, setStartMedia] = useState(false)
   const startedAt = useRef(0)
   const elapsedAtStart = useRef(0)
 
@@ -45,7 +40,6 @@ export function MeditationTimer({
       if (mode === 'countdown' && nextElapsed >= durationSeconds) {
         setElapsedSeconds(durationSeconds)
         setIsRunning(false)
-        onPause()
         return
       }
       setElapsedSeconds(nextElapsed)
@@ -53,7 +47,7 @@ export function MeditationTimer({
 
     const interval = window.setInterval(update, 250)
     return () => window.clearInterval(interval)
-  }, [durationSeconds, isRunning, mode, onPause])
+  }, [durationSeconds, isRunning, mode])
 
   const start = () => {
     if (mode === 'countdown' && displayedSeconds === 0) setElapsedSeconds(0)
@@ -61,25 +55,22 @@ export function MeditationTimer({
       mode === 'countdown' && displayedSeconds === 0 ? 0 : elapsedSeconds
     startedAt.current = Date.now()
     setIsRunning(true)
-    void onStart()
+    if (startMedia) void onStartWithMedia()
   }
 
   const pause = () => {
     setIsRunning(false)
-    onPause()
   }
 
   const reset = () => {
     setIsRunning(false)
     setElapsedSeconds(0)
-    onPause()
   }
 
   const changeMode = (nextMode: TimerMode) => {
     setMode(nextMode)
     setIsRunning(false)
     setElapsedSeconds(0)
-    onPause()
   }
 
   return (
@@ -121,11 +112,19 @@ export function MeditationTimer({
       <output className="timer-display" aria-live="off">
         {formatTime(displayedSeconds)}
       </output>
+      <label className="timer-media-option">
+        <input
+          type="checkbox"
+          checked={startMedia}
+          onChange={(event) => setStartMedia(event.target.checked)}
+        />
+        Play all audio and full screen the image when meditation starts
+      </label>
       <div className="timer-buttons">
         <button
           type="button"
           className="primary-control"
-          disabled={disabled || isRunning}
+          disabled={isRunning}
           onClick={start}
         >
           ▶ Start Meditation

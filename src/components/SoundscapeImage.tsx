@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
 import { flushSync } from 'react-dom'
 
 interface SoundscapeImageProps {
@@ -7,11 +14,14 @@ interface SoundscapeImageProps {
   onRemove: () => void
 }
 
-export function SoundscapeImage({
-  image,
-  onChoose,
-  onRemove
-}: SoundscapeImageProps) {
+export interface SoundscapeImageHandle {
+  enterFullscreen: () => void
+}
+
+export const SoundscapeImage = forwardRef<
+  SoundscapeImageHandle,
+  SoundscapeImageProps
+>(function SoundscapeImage({ image, onChoose, onRemove }, ref) {
   const imageUrl = useMemo(
     () => (image ? URL.createObjectURL(image) : null),
     [image]
@@ -56,6 +66,12 @@ export function SoundscapeImage({
       // Theater mode remains available when fullscreen is denied.
     }
   }
+
+  useImperativeHandle(ref, () => ({
+    enterFullscreen: () => {
+      if (imageUrl) void enterFullscreen()
+    }
+  }))
 
   const leaveViewer = async () => {
     if (document.fullscreenElement && document.exitFullscreen) {
@@ -133,4 +149,4 @@ export function SoundscapeImage({
       )}
     </section>
   )
-}
+})

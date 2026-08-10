@@ -261,6 +261,20 @@ h1 {
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.03em;
 }
+.timer-media-option {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #3f5047;
+  font-size: 0.88rem;
+}
+.timer-media-option input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #9c7431;
+}
 .timer-buttons {
   grid-column: 1 / -1;
   display: flex;
