@@ -216,6 +216,13 @@ export function useTracks(engine: AudioEngine) {
   }
 
   const playAll = async () => {
+    setTracks((current) =>
+      current.map((track) =>
+        track.status === 'ready' && track.isSoundEffect
+          ? { ...track, isEnabled: true }
+          : track
+      )
+    )
     const ids = tracks
       .filter((track) => track.status === 'ready' && !track.isSoundEffect)
       .map((track) => track.id)
@@ -228,6 +235,12 @@ export function useTracks(engine: AudioEngine) {
 
   const stopAll = () => {
     engine.stopAll()
+    lastEffectPlay.current.clear()
+    setTracks((current) =>
+      current.map((track) =>
+        track.isSoundEffect ? { ...track, isEnabled: false } : track
+      )
+    )
   }
 
   return {

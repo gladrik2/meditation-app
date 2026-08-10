@@ -16,6 +16,7 @@ interface SoundscapeImageProps {
 
 export interface SoundscapeImageHandle {
   enterFullscreen: () => void
+  showCompletionBlackout: () => void
 }
 
 export const SoundscapeImage = forwardRef<
@@ -27,6 +28,7 @@ export const SoundscapeImage = forwardRef<
     [image]
   )
   const [isTheater, setIsTheater] = useState(false)
+  const [showBlackout, setShowBlackout] = useState(false)
   const viewerRef = useRef<HTMLDivElement>(null)
   const enteredFullscreen = useRef(false)
 
@@ -37,12 +39,16 @@ export const SoundscapeImage = forwardRef<
   useEffect(() => {
     if (!isTheater) return
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsTheater(false)
+      if (event.key === 'Escape') {
+        setIsTheater(false)
+        setShowBlackout(false)
+      }
     }
     const onFullscreenChange = () => {
       if (enteredFullscreen.current && !document.fullscreenElement) {
         enteredFullscreen.current = false
         setIsTheater(false)
+        setShowBlackout(false)
       }
     }
     document.addEventListener('keydown', onKeyDown)
@@ -70,6 +76,9 @@ export const SoundscapeImage = forwardRef<
   useImperativeHandle(ref, () => ({
     enterFullscreen: () => {
       if (imageUrl) void enterFullscreen()
+    },
+    showCompletionBlackout: () => {
+      if (isTheater) setShowBlackout(true)
     }
   }))
 
@@ -78,10 +87,12 @@ export const SoundscapeImage = forwardRef<
       await document.exitFullscreen()
     }
     setIsTheater(false)
+    setShowBlackout(false)
   }
 
   const removeImage = () => {
     setIsTheater(false)
+    setShowBlackout(false)
     onRemove()
   }
 
@@ -134,17 +145,18 @@ export const SoundscapeImage = forwardRef<
 
       {isTheater && (
         <div
-          className="image-viewer"
+          className={`image-viewer${showBlackout ? ' image-viewer-complete' : ''}`}
           ref={viewerRef}
           role="dialog"
           aria-modal="true"
-          aria-label="Soundscape image viewer. Click the image or press Escape to exit."
+          aria-label={
+            showBlackout
+              ? 'Meditation completed. Click or press Escape to exit.'
+              : 'Soundscape image viewer. Click the image or press Escape to exit.'
+          }
+          onClick={() => void leaveViewer()}
         >
-          <img
-            src={imageUrl}
-            alt="Soundscape visual"
-            onClick={() => void leaveViewer()}
-          />
+          {!showBlackout && <img src={imageUrl} alt="Soundscape visual" />}
         </div>
       )}
     </section>

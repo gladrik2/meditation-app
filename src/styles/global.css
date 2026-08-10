@@ -269,6 +269,15 @@ h1 {
   color: #3f5047;
   font-size: 0.88rem;
 }
+.timer-complete {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 11px 14px;
+  border-radius: 8px;
+  color: #fefcf5;
+  background: #24352c;
+  font-weight: 700;
+}
 .timer-media-option input {
   width: 18px;
   height: 18px;

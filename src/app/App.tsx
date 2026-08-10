@@ -96,6 +96,10 @@ export function App({ engine: suppliedEngine }: AppProps) {
               imageRef.current?.enterFullscreen()
               return controls.playAll()
             }}
+            onComplete={() => {
+              controls.stopAll()
+              imageRef.current?.showCompletionBlackout()
+            }}
           />
           <div className="master-controls">
             <div className="master-buttons">
