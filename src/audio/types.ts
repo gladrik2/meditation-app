@@ -23,6 +23,8 @@ export interface AudioTransportEvent {
 export type AudioTransportListener = (event: AudioTransportEvent) => void
 
 export interface AudioEngine {
+  prepareTimerCue(): Promise<void>
+  playTimerCue(): Promise<void>
   subscribe(listener: AudioTransportListener): () => void
   loadTrack(id: TrackId, file: File): Promise<number>
   play(id: TrackId): Promise<void>

@@ -18,6 +18,8 @@ export function createMockEngine(): MockAudioEngine {
     for (const listener of listeners) listener(event)
   }
   const engine: MockAudioEngine = {
+    prepareTimerCue: vi.fn().mockResolvedValue(undefined),
+    playTimerCue: vi.fn().mockResolvedValue(undefined),
     subscribe: vi.fn((listener: AudioTransportListener) => {
       listeners.add(listener)
       return () => listeners.delete(listener)

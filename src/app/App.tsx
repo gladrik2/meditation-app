@@ -4,6 +4,7 @@ import type { AudioEngine } from '../audio/types'
 import { TrackList } from '../components/TrackList'
 import { SoundscapeImage } from '../components/SoundscapeImage'
 import { VolumeControl } from '../components/VolumeControl'
+import { MeditationTimer } from '../components/MeditationTimer'
 import { useTracks } from '../features/tracks/useTracks'
 
 interface AppProps {
@@ -80,6 +81,13 @@ export function App({ engine: suppliedEngine }: AppProps) {
         </section>
 
         <section className="mixer" aria-label="Soundscape mixer">
+          <MeditationTimer
+            onStart={async (playAllAudio) => {
+              await engine.prepareTimerCue()
+              if (playAllAudio) await controls.playAll()
+            }}
+            onComplete={() => void engine.playTimerCue()}
+          />
           <SoundscapeImage
             image={image}
             onChoose={() => inputRef.current?.click()}

@@ -8,16 +8,37 @@ class FakeNode {
 }
 
 class FakeGain extends FakeNode {
-  gain = { value: 1 }
+  gain = {
+    value: 1,
+    setValueAtTime: vi.fn(),
+    linearRampToValueAtTime: vi.fn(),
+    exponentialRampToValueAtTime: vi.fn()
+  }
 }
 
 class FakeMediaSource extends FakeNode {}
 
+class FakeOscillator extends FakeNode {
+  type: OscillatorType = 'sine'
+  frequency = {
+    setValueAtTime: vi.fn(),
+    linearRampToValueAtTime: vi.fn()
+  }
+  start = vi.fn()
+  stop = vi.fn()
+  addEventListener = vi.fn((_name: string, listener: EventListener) => {
+    this.ended = listener
+  })
+  ended: EventListener | null = null
+}
+
 class FakeContext {
   state: AudioContextState = 'suspended'
   destination = new FakeNode()
+  currentTime = 4
   gainNodes: FakeGain[] = []
   mediaSources: FakeMediaSource[] = []
+  oscillators: FakeOscillator[] = []
   createGain = vi.fn(() => {
     const node = new FakeGain()
     this.gainNodes.push(node)
@@ -26,6 +47,11 @@ class FakeContext {
   createMediaElementSource = vi.fn(() => {
     const node = new FakeMediaSource()
     this.mediaSources.push(node)
+    return node
+  })
+  createOscillator = vi.fn(() => {
+    const node = new FakeOscillator()
+    this.oscillators.push(node)
     return node
   })
   resume = vi.fn(async () => {
@@ -108,6 +134,43 @@ describe('WebAudioEngine', () => {
 
     engine.setTrackLoop('rain', true)
     expect(audio.loop).toBe(true)
+  })
+
+  it('prepares and plays a shaped cue on its shared context, then cleans up', async () => {
+    const engine = new WebAudioEngine()
+    await engine.prepareTimerCue()
+    await engine.playTimerCue()
+
+    expect(context.resume).toHaveBeenCalledOnce()
+    expect(context.oscillators).toHaveLength(1)
+    expect(context.gainNodes).toHaveLength(2)
+    const oscillator = context.oscillators[0]
+    const cueGain = context.gainNodes[1]
+    expect(cueGain.gain.setValueAtTime).toHaveBeenCalledWith(0.0001, 4)
+    expect(cueGain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(
+      0.09,
+      4.04
+    )
+    expect(cueGain.gain.exponentialRampToValueAtTime).toHaveBeenCalledWith(
+      0.0001,
+      5.2
+    )
+    expect(oscillator.start).toHaveBeenCalledWith(4)
+    expect(oscillator.stop).toHaveBeenCalledWith(5.2)
+    oscillator.ended?.(new Event('ended'))
+    expect(oscillator.disconnect).toHaveBeenCalledOnce()
+    expect(cueGain.disconnect).toHaveBeenCalledOnce()
+  })
+
+  it('keeps visual fallback callers safe when Web Audio is unsupported', async () => {
+    Object.defineProperty(window, 'AudioContext', {
+      configurable: true,
+      value: undefined
+    })
+    const engine = new WebAudioEngine()
+
+    await expect(engine.prepareTimerCue()).resolves.toBeUndefined()
+    await expect(engine.playTimerCue()).resolves.toBeUndefined()
   })
 
   it('uses media element transport and releases resources', async () => {

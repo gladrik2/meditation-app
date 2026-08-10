@@ -24,6 +24,45 @@ describe('App', () => {
     ).toBeInTheDocument()
   })
 
+  it('announces countdown completion and requests one timer cue', async () => {
+    vi.useFakeTimers()
+    const engine = createMockEngine()
+    render(<App engine={engine} />)
+
+    fireEvent.change(screen.getByLabelText('Countdown duration (minutes)'), {
+      target: { value: '1' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    expect(engine.prepareTimerCue).toHaveBeenCalledOnce()
+    await vi.advanceTimersByTimeAsync(59_000)
+    expect(engine.playTimerCue).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(screen.getByText('Meditation complete')).toHaveAttribute(
+      'role',
+      'status'
+    )
+    expect(engine.playTimerCue).toHaveBeenCalledOnce()
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(engine.playTimerCue).toHaveBeenCalledOnce()
+  })
+
+  it('does not cue for pause, reset, or stopwatch ticks', async () => {
+    vi.useFakeTimers()
+    const engine = createMockEngine()
+    render(<App engine={engine} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    await vi.advanceTimersByTimeAsync(2_000)
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Stopwatch' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(engine.playTimerCue).not.toHaveBeenCalled()
+  })
+
   it('loads multiple selected audio files and removes a track', async () => {
     const user = userEvent.setup()
     const engine = createMockEngine()

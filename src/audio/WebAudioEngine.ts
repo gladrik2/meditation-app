@@ -31,6 +31,49 @@ export class WebAudioEngine implements AudioEngine {
   private readonly listeners = new Set<AudioTransportListener>()
   private disposed = false
 
+  async prepareTimerCue(): Promise<void> {
+    try {
+      await this.resume()
+    } catch {
+      // The timer's visual completion state remains the reliable fallback when
+      // Web Audio is unavailable or a browser declines to unlock it.
+    }
+  }
+
+  async playTimerCue(): Promise<void> {
+    try {
+      const context = this.getContext()
+      if (context.state !== 'running') return
+
+      const oscillator = context.createOscillator()
+      const gain = context.createGain()
+      const start = context.currentTime
+      const attackEnd = start + 0.04
+      const end = start + 1.2
+
+      oscillator.type = 'sine'
+      oscillator.frequency.setValueAtTime(440, start)
+      oscillator.frequency.linearRampToValueAtTime(523.25, end)
+      gain.gain.setValueAtTime(0.0001, start)
+      gain.gain.linearRampToValueAtTime(0.09, attackEnd)
+      gain.gain.exponentialRampToValueAtTime(0.0001, end)
+      oscillator.connect(gain)
+      gain.connect(this.masterGain!)
+      oscillator.addEventListener(
+        'ended',
+        () => {
+          oscillator.disconnect()
+          gain.disconnect()
+        },
+        { once: true }
+      )
+      oscillator.start(start)
+      oscillator.stop(end)
+    } catch {
+      // Cue playback is an enhancement; completion is also announced visually.
+    }
+  }
+
   subscribe(listener: AudioTransportListener): () => void {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)

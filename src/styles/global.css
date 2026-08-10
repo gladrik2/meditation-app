@@ -133,6 +133,70 @@ h1 {
   border-radius: 20px;
   box-shadow: 0 16px 50px #28382f0d;
 }
+.timer-panel {
+  margin-bottom: 24px;
+  padding: 20px;
+  border: 2px solid #e2ded2;
+  border-radius: 14px;
+  background: #faf9f4;
+}
+.timer-panel-complete {
+  border-color: #8a6a2d;
+  background: #fff7da;
+  box-shadow: inset 5px 0 #8a6a2d;
+}
+.timer-heading,
+.timer-controls,
+.timer-modes {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.timer-heading {
+  justify-content: space-between;
+}
+.timer-heading h2 {
+  margin: 0;
+  font-family: Georgia, serif;
+  font-weight: 500;
+}
+.timer-modes button[aria-pressed='true'] {
+  background: #24352c;
+  color: white;
+}
+.timer-duration,
+.timer-play-audio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+.timer-duration input {
+  width: 5rem;
+}
+.timer-display {
+  display: block;
+  margin-top: 18px;
+  font-family: Georgia, serif;
+  font-size: 3rem;
+  font-variant-numeric: tabular-nums;
+}
+.timer-completion {
+  min-height: 1.5em;
+  margin: 4px 0;
+  color: #6f5018;
+  font-weight: 750;
+}
+.timer-controls {
+  margin-top: 16px;
+}
+.timer-controls button,
+.timer-modes button {
+  border: 1px solid #cfcbbf;
+  border-radius: 8px;
+  padding: 8px 13px;
+  background: white;
+}
 .image-panel {
   display: flex;
   align-items: center;
