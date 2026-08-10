@@ -52,8 +52,9 @@ class FakeAudio extends EventTarget {
     if (name === 'src') this.src = ''
   })
 
-  constructor() {
+  constructor(src = '') {
     super()
+    this.src = src
     FakeAudio.instances.push(this)
   }
 
@@ -155,6 +156,23 @@ describe('WebAudioEngine', () => {
     expect(wind.removeAttribute).toHaveBeenCalledWith('src')
     expect(context.close).toHaveBeenCalledOnce()
     expect(revokeObjectURL).toHaveBeenCalledTimes(2)
+  })
+
+  it('prepares and plays the completion gong through the shared context', async () => {
+    const engine = new WebAudioEngine()
+
+    await engine.prepareCompletionGong()
+    const gong = FakeAudio.instances[0]
+    expect(gong.src).toBe('/audio/built-in/gong.ogg')
+    expect(gong.preload).toBe('auto')
+    expect(context.resume).toHaveBeenCalledOnce()
+    expect(context.createMediaElementSource).toHaveBeenCalledWith(gong)
+
+    gong.currentTime = 12
+    await engine.playCompletionGong()
+    expect(FakeAudio.instances).toHaveLength(1)
+    expect(gong.currentTime).toBe(0)
+    expect(gong.play).toHaveBeenCalledOnce()
   })
 
   it('categorizes media errors and revokes failed object URLs', async () => {

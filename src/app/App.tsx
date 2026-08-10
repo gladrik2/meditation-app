@@ -92,12 +92,14 @@ export function App({ engine: suppliedEngine }: AppProps) {
             onRemove={() => setImage(null)}
           />
           <MeditationTimer
+            onStart={() => engine.prepareCompletionGong()}
             onStartWithMedia={() => {
               imageRef.current?.enterFullscreen()
               return controls.playAll()
             }}
             onComplete={() => {
               controls.stopAll()
+              void engine.playCompletionGong()
               imageRef.current?.showCompletionBlackout()
             }}
           />

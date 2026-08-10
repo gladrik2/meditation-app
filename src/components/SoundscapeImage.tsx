@@ -157,6 +157,9 @@ export const SoundscapeImage = forwardRef<
           onClick={() => void leaveViewer()}
         >
           {!showBlackout && <img src={imageUrl} alt="Soundscape visual" />}
+          {showBlackout && (
+            <p className="image-viewer-complete-message">meditation complete</p>
+          )}
         </div>
       )}
     </section>

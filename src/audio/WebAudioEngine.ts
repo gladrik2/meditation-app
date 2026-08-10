@@ -29,6 +29,8 @@ export class WebAudioEngine implements AudioEngine {
   private readonly tracks = new Map<TrackId, EngineTrack>()
   private readonly pendingTracks = new Map<TrackId, PendingTrack>()
   private readonly listeners = new Set<AudioTransportListener>()
+  private completionGong: HTMLAudioElement | null = null
+  private completionGongSource: MediaElementAudioSourceNode | null = null
   private disposed = false
 
   subscribe(listener: AudioTransportListener): () => void {
@@ -186,6 +188,25 @@ export class WebAudioEngine implements AudioEngine {
     )
   }
 
+  async prepareCompletionGong(): Promise<void> {
+    const context = await this.resume()
+    if (this.completionGong) return
+
+    const gong = new Audio('/audio/built-in/gong.ogg')
+    gong.preload = 'auto'
+    const source = context.createMediaElementSource(gong)
+    source.connect(this.masterGain!)
+    gong.load()
+    this.completionGong = gong
+    this.completionGongSource = source
+  }
+
+  async playCompletionGong(): Promise<void> {
+    await this.prepareCompletionGong()
+    this.completionGong!.currentTime = 0
+    await this.completionGong!.play()
+  }
+
   stopAll(): void {
     for (const track of this.tracks.values()) {
       track.element.pause()
@@ -227,6 +248,12 @@ export class WebAudioEngine implements AudioEngine {
     this.disposed = true
     for (const pending of [...this.pendingTracks.values()]) pending.cancel()
     for (const id of [...this.tracks.keys()]) this.removeTrack(id)
+    this.completionGong?.pause()
+    this.completionGong?.removeAttribute('src')
+    this.completionGong?.load()
+    this.completionGongSource?.disconnect()
+    this.completionGong = null
+    this.completionGongSource = null
     this.masterGain?.disconnect()
     if (this.context && this.context.state !== 'closed')
       await this.context.close()

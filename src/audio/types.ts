@@ -28,6 +28,8 @@ export interface AudioEngine {
   play(id: TrackId): Promise<void>
   pause(id: TrackId): void
   playAll(ids: TrackId[]): Promise<void>
+  prepareCompletionGong(): Promise<void>
+  playCompletionGong(): Promise<void>
   stopAll(): void
   setTrackLoop(id: TrackId, loop: boolean): void
   setTrackVolume(id: TrackId, volume: number): void

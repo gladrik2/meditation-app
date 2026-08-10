@@ -333,7 +333,12 @@ describe('App', () => {
     expect(screen.getByText('Meditation completed')).toBeInTheDocument()
     expect(engine.playAll).not.toHaveBeenCalled()
     expect(engine.pause).not.toHaveBeenCalled()
-    expect(engine.stopAll).toHaveBeenCalled()
+    expect(engine.stopAll).toHaveBeenCalledOnce()
+    expect(engine.prepareCompletionGong).toHaveBeenCalled()
+    expect(engine.playCompletionGong).toHaveBeenCalled()
+    expect(vi.mocked(engine.stopAll)).toHaveBeenCalledBefore(
+      vi.mocked(engine.playCompletionGong)
+    )
     expect(screen.getByRole('button', { name: 'Ⅱ Pause' })).toBeDisabled()
 
     fireEvent.click(screen.getByRole('button', { name: /Reset/ }))
@@ -365,6 +370,7 @@ describe('App', () => {
     })
     expect(blackout).toHaveClass('image-viewer-complete')
     expect(blackout.querySelector('img')).toBeNull()
+    expect(screen.getByText('meditation complete')).toBeInTheDocument()
     fireEvent.click(blackout)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
