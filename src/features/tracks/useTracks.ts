@@ -79,7 +79,7 @@ export function useTracks(engine: AudioEngine) {
           !track.isSoundEffect ||
           !track.isEnabled ||
           track.status !== 'ready' ||
-          now - (lastEffectPlay.current.get(track.id) ?? -Infinity) <
+          now - (lastEffectPlay.current.get(track.id) ?? -Infinity) <=
             SOUND_EFFECT_COOLDOWN_MS
         )
           continue
