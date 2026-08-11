@@ -13,6 +13,7 @@ interface EngineTrack {
   mediaSource: MediaElementAudioSourceNode
   startGain: GainNode
   gain: GainNode
+  fadeOutTimer: ReturnType<typeof setTimeout> | null
   removeTransportListeners: () => void
 }
 
@@ -23,7 +24,7 @@ interface PendingTrack {
 }
 
 const clampVolume = (value: number) => Math.min(1, Math.max(0, value))
-const startEnvelopeSeconds = 0.005
+const transportEnvelopeSeconds = 0.015
 const completionGongUrl = `${import.meta.env.BASE_URL}audio/built-in/gong.ogg`
 
 export class WebAudioEngine implements AudioEngine {
@@ -145,6 +146,7 @@ export class WebAudioEngine implements AudioEngine {
             mediaSource,
             startGain,
             gain,
+            fadeOutTimer: null,
             removeTransportListeners
           })
           resolve(element.duration)
@@ -189,7 +191,8 @@ export class WebAudioEngine implements AudioEngine {
   }
 
   pause(id: TrackId): void {
-    this.tracks.get(id)?.element.pause()
+    const track = this.tracks.get(id)
+    if (track) this.fadeOutTrack(track, () => track.element.pause())
   }
 
   async playAll(ids: TrackId[]): Promise<void> {
@@ -208,6 +211,7 @@ export class WebAudioEngine implements AudioEngine {
     context: AudioContext
   ): Promise<void> {
     if (track.element.ended) track.element.currentTime = 0
+    this.cancelFadeOut(track)
     const gain = track.startGain.gain
     const muteTime = context.currentTime
     gain.cancelScheduledValues(muteTime)
@@ -222,7 +226,30 @@ export class WebAudioEngine implements AudioEngine {
     }
     const fadeStartTime = context.currentTime
     gain.setValueAtTime(0, fadeStartTime)
-    gain.linearRampToValueAtTime(1, fadeStartTime + startEnvelopeSeconds)
+    gain.linearRampToValueAtTime(1, fadeStartTime + transportEnvelopeSeconds)
+  }
+
+  private cancelFadeOut(track: EngineTrack): void {
+    if (track.fadeOutTimer === null) return
+    clearTimeout(track.fadeOutTimer)
+    track.fadeOutTimer = null
+  }
+
+  private fadeOutTrack(track: EngineTrack, onComplete: () => void): void {
+    this.cancelFadeOut(track)
+    const gain = track.startGain.gain
+    const fadeStartTime = this.getContext().currentTime
+    if (typeof gain.cancelAndHoldAtTime === 'function') {
+      gain.cancelAndHoldAtTime(fadeStartTime)
+    } else {
+      gain.cancelScheduledValues(fadeStartTime)
+      gain.setValueAtTime(gain.value, fadeStartTime)
+    }
+    gain.linearRampToValueAtTime(0, fadeStartTime + transportEnvelopeSeconds)
+    track.fadeOutTimer = setTimeout(() => {
+      track.fadeOutTimer = null
+      onComplete()
+    }, transportEnvelopeSeconds * 1000)
   }
 
   async prepareCompletionGong(): Promise<void> {
@@ -262,8 +289,10 @@ export class WebAudioEngine implements AudioEngine {
 
   stopAll(): void {
     for (const track of this.tracks.values()) {
-      track.element.pause()
-      track.element.currentTime = 0
+      this.fadeOutTrack(track, () => {
+        track.element.pause()
+        track.element.currentTime = 0
+      })
     }
   }
 
@@ -286,6 +315,7 @@ export class WebAudioEngine implements AudioEngine {
     this.pendingTracks.get(id)?.cancel()
     const track = this.tracks.get(id)
     if (!track) return
+    this.cancelFadeOut(track)
     track.removeTransportListeners()
     track.element.pause()
     track.element.removeAttribute('src')

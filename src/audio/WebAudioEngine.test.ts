@@ -11,6 +11,7 @@ class FakeGain extends FakeNode {
   gain = {
     value: 1,
     cancelScheduledValues: vi.fn(),
+    cancelAndHoldAtTime: vi.fn(),
     setValueAtTime: vi.fn(),
     linearRampToValueAtTime: vi.fn()
   }
@@ -189,7 +190,7 @@ describe('WebAudioEngine', () => {
 
     expect(startGain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(
       1,
-      14.005
+      14.015
     )
     expect(volumeGain.gain.value).toBe(0.4)
   })
@@ -231,7 +232,7 @@ describe('WebAudioEngine', () => {
     await vi.waitFor(() =>
       expect(rainStartGain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(
         1,
-        15.005
+        15.015
       )
     )
     expect(windStartGain.gain.linearRampToValueAtTime).not.toHaveBeenCalled()
@@ -240,7 +241,7 @@ describe('WebAudioEngine', () => {
     await playing
     expect(windStartGain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(
       1,
-      16.005
+      16.015
     )
   })
 
@@ -280,7 +281,52 @@ describe('WebAudioEngine', () => {
     expect(context.gainNodes[0].gain.value).toBe(0.75)
   })
 
+  it('fades out before pausing and resumes from the same position', async () => {
+    vi.useFakeTimers()
+    const engine = new WebAudioEngine()
+    const loading = engine.loadTrack(
+      'rain',
+      new File(['audio'], 'rain.wav', { type: 'audio/wav' })
+    )
+    const rain = FakeAudio.instances[0]
+    rain.metadata(20)
+    await loading
+    await engine.play('rain')
+    engine.setTrackVolume('rain', 0.4)
+    const volumeGain = context.gainNodes[1]
+    const transportGain = context.gainNodes[2]
+    transportGain.gain.linearRampToValueAtTime.mockClear()
+    rain.pause.mockClear()
+    rain.currentTime = 8
+
+    engine.pause('rain')
+
+    expect(transportGain.gain.cancelAndHoldAtTime).toHaveBeenCalledWith(12)
+    expect(transportGain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(
+      0,
+      12.015
+    )
+    expect(rain.pause).not.toHaveBeenCalled()
+    expect(volumeGain.gain.value).toBe(0.4)
+    vi.advanceTimersByTime(14)
+    expect(rain.pause).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    expect(rain.pause).toHaveBeenCalledOnce()
+    expect(rain.currentTime).toBe(8)
+
+    transportGain.gain.linearRampToValueAtTime.mockClear()
+    await engine.play('rain')
+    expect(rain.currentTime).toBe(8)
+    expect(transportGain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(
+      1,
+      12.015
+    )
+    expect(volumeGain.gain.value).toBe(0.4)
+    vi.useRealTimers()
+  })
+
   it('uses media element transport and releases resources', async () => {
+    vi.useFakeTimers()
     const engine = new WebAudioEngine()
     const listener = vi.fn()
     engine.subscribe(listener)
@@ -302,6 +348,8 @@ describe('WebAudioEngine', () => {
     expect(listener).toHaveBeenLastCalledWith({ id: 'rain', state: 'playing' })
     rain.currentTime = 8
     engine.pause('rain')
+    expect(rain.pause).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(15)
     rain.dispatchEvent(new Event('pause'))
     expect(rain.pause).toHaveBeenCalledOnce()
     expect(rain.currentTime).toBe(8)
@@ -310,7 +358,12 @@ describe('WebAudioEngine', () => {
     expect(listener).toHaveBeenLastCalledWith({ id: 'rain', state: 'ended' })
     wind.dispatchEvent(new Event('error'))
     expect(listener).toHaveBeenLastCalledWith({ id: 'wind', state: 'error' })
+    rain.pause.mockClear()
+    wind.pause.mockClear()
     engine.stopAll()
+    expect(rain.pause).not.toHaveBeenCalled()
+    expect(wind.pause).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(15)
     expect(rain.currentTime).toBe(0)
     expect(wind.currentTime).toBe(0)
 
@@ -325,6 +378,7 @@ describe('WebAudioEngine', () => {
     expect(wind.removeAttribute).toHaveBeenCalledWith('src')
     expect(context.close).toHaveBeenCalledOnce()
     expect(revokeObjectURL).toHaveBeenCalledTimes(2)
+    vi.useRealTimers()
   })
 
   it('prepares and plays the completion gong through the shared context', async () => {
