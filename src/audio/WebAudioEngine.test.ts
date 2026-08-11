@@ -8,7 +8,20 @@ class FakeNode {
 }
 
 class FakeGain extends FakeNode {
-  gain = { value: 1 }
+  gain = {
+    value: 1,
+    cancelScheduledValues: vi.fn(),
+    setValueAtTime: vi.fn(),
+    linearRampToValueAtTime: vi.fn()
+  }
+}
+
+class FakeCompressor extends FakeNode {
+  threshold = { value: 0 }
+  knee = { value: 0 }
+  ratio = { value: 0 }
+  attack = { value: 0 }
+  release = { value: 0 }
 }
 
 class FakeMediaSource extends FakeNode {}
@@ -24,12 +37,19 @@ class FakeBufferSource extends EventTarget {
 class FakeContext {
   state: AudioContextState = 'suspended'
   destination = new FakeNode()
+  currentTime = 12
   gainNodes: FakeGain[] = []
+  compressors: FakeCompressor[] = []
   mediaSources: FakeMediaSource[] = []
   bufferSources: FakeBufferSource[] = []
   createGain = vi.fn(() => {
     const node = new FakeGain()
     this.gainNodes.push(node)
+    return node
+  })
+  createDynamicsCompressor = vi.fn(() => {
+    const node = new FakeCompressor()
+    this.compressors.push(node)
     return node
   })
   createMediaElementSource = vi.fn(() => {
@@ -123,8 +143,11 @@ describe('WebAudioEngine', () => {
 
     expect(await loading).toBe(20)
     expect(context.createMediaElementSource).toHaveBeenCalledWith(audio)
-    expect(context.gainNodes).toHaveLength(2)
+    expect(context.gainNodes).toHaveLength(3)
     expect(context.mediaSources[0].connect).toHaveBeenCalledWith(
+      context.gainNodes[2]
+    )
+    expect(context.gainNodes[2].connect).toHaveBeenCalledWith(
       context.gainNodes[1]
     )
     expect(context.gainNodes[1].connect).toHaveBeenCalledWith(
@@ -133,6 +156,43 @@ describe('WebAudioEngine', () => {
 
     engine.setTrackLoop('rain', true)
     expect(audio.loop).toBe(true)
+  })
+
+  it('fades starts in independently of the per-track volume', async () => {
+    const engine = new WebAudioEngine()
+    const loading = engine.loadTrack(
+      'rain',
+      new File(['audio'], 'rain.wav', { type: 'audio/wav' })
+    )
+    FakeAudio.instances[0].metadata(20)
+    await loading
+
+    engine.setTrackVolume('rain', 0.4)
+    await engine.play('rain')
+
+    const volumeGain = context.gainNodes[1]
+    const startGain = context.gainNodes[2]
+    expect(startGain.gain.cancelScheduledValues).toHaveBeenCalledWith(12)
+    expect(startGain.gain.setValueAtTime).toHaveBeenCalledWith(0, 12)
+    expect(startGain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(
+      1,
+      12.005
+    )
+    expect(volumeGain.gain.value).toBe(0.4)
+  })
+
+  it('limits the summed master output without changing master volume', () => {
+    const engine = new WebAudioEngine()
+    engine.setMasterVolume(0.75)
+
+    expect(context.compressors).toHaveLength(1)
+    const limiter = context.compressors[0]
+    expect(context.gainNodes[0].connect).toHaveBeenCalledWith(limiter)
+    expect(limiter.connect).toHaveBeenCalledWith(context.destination)
+    expect(limiter.threshold.value).toBe(-1)
+    expect(limiter.knee.value).toBe(0)
+    expect(limiter.ratio.value).toBe(20)
+    expect(context.gainNodes[0].gain.value).toBe(0.75)
   })
 
   it('uses media element transport and releases resources', async () => {

@@ -11,6 +11,7 @@ interface EngineTrack {
   url: string
   element: HTMLAudioElement
   mediaSource: MediaElementAudioSourceNode
+  startGain: GainNode
   gain: GainNode
   removeTransportListeners: () => void
 }
@@ -22,11 +23,13 @@ interface PendingTrack {
 }
 
 const clampVolume = (value: number) => Math.min(1, Math.max(0, value))
+const startEnvelopeSeconds = 0.005
 const completionGongUrl = `${import.meta.env.BASE_URL}audio/built-in/gong.ogg`
 
 export class WebAudioEngine implements AudioEngine {
   private context: AudioContext | null = null
   private masterGain: GainNode | null = null
+  private outputLimiter: DynamicsCompressorNode | null = null
   private readonly tracks = new Map<TrackId, EngineTrack>()
   private readonly pendingTracks = new Map<TrackId, PendingTrack>()
   private readonly listeners = new Set<AudioTransportListener>()
@@ -55,7 +58,14 @@ export class WebAudioEngine implements AudioEngine {
         throw new Error('Web Audio is not supported by this browser.')
       this.context = new AudioContextConstructor()
       this.masterGain = this.context.createGain()
-      this.masterGain.connect(this.context.destination)
+      this.outputLimiter = this.context.createDynamicsCompressor()
+      this.outputLimiter.threshold.value = -1
+      this.outputLimiter.knee.value = 0
+      this.outputLimiter.ratio.value = 20
+      this.outputLimiter.attack.value = 0.003
+      this.outputLimiter.release.value = 0.1
+      this.masterGain.connect(this.outputLimiter)
+      this.outputLimiter.connect(this.context.destination)
     }
     return this.context
   }
@@ -102,11 +112,14 @@ export class WebAudioEngine implements AudioEngine {
         if (settled || this.pendingTracks.get(id)?.element !== element) return
 
         let gain: GainNode | undefined
+        let startGain: GainNode | undefined
         let mediaSource: MediaElementAudioSourceNode | undefined
         try {
           gain = context.createGain()
+          startGain = context.createGain()
           mediaSource = context.createMediaElementSource(element)
-          mediaSource.connect(gain)
+          mediaSource.connect(startGain)
+          startGain.connect(gain)
           gain.connect(this.masterGain!)
           settled = true
           cleanUpListeners()
@@ -130,12 +143,14 @@ export class WebAudioEngine implements AudioEngine {
             url,
             element,
             mediaSource,
+            startGain,
             gain,
             removeTransportListeners
           })
           resolve(element.duration)
         } catch {
           mediaSource?.disconnect()
+          startGain?.disconnect()
           gain?.disconnect()
           fail(
             'metadata-read-failure',
@@ -167,10 +182,11 @@ export class WebAudioEngine implements AudioEngine {
   }
 
   async play(id: TrackId): Promise<void> {
-    await this.resume()
+    const context = await this.resume()
     const track = this.tracks.get(id)
     if (!track) return
     if (track.element.ended) track.element.currentTime = 0
+    this.applyStartEnvelope(track, context.currentTime)
     await track.element.play()
   }
 
@@ -179,15 +195,23 @@ export class WebAudioEngine implements AudioEngine {
   }
 
   async playAll(ids: TrackId[]): Promise<void> {
-    await this.resume()
+    const context = await this.resume()
     await Promise.all(
       ids.map(async (id) => {
         const track = this.tracks.get(id)
         if (!track) return
         if (track.element.ended) track.element.currentTime = 0
+        this.applyStartEnvelope(track, context.currentTime)
         await track.element.play()
       })
     )
+  }
+
+  private applyStartEnvelope(track: EngineTrack, startTime: number): void {
+    const gain = track.startGain.gain
+    gain.cancelScheduledValues(startTime)
+    gain.setValueAtTime(0, startTime)
+    gain.linearRampToValueAtTime(1, startTime + startEnvelopeSeconds)
   }
 
   async prepareCompletionGong(): Promise<void> {
@@ -256,6 +280,7 @@ export class WebAudioEngine implements AudioEngine {
     track.element.removeAttribute('src')
     track.element.load()
     track.mediaSource.disconnect()
+    track.startGain.disconnect()
     track.gain.disconnect()
     URL.revokeObjectURL(track.url)
     this.tracks.delete(id)
@@ -274,10 +299,12 @@ export class WebAudioEngine implements AudioEngine {
     this.completionGongBuffer = null
     this.completionGongLoad = null
     this.masterGain?.disconnect()
+    this.outputLimiter?.disconnect()
     if (this.context && this.context.state !== 'closed')
       await this.context.close()
     this.context = null
     this.masterGain = null
+    this.outputLimiter = null
     this.listeners.clear()
   }
 }
