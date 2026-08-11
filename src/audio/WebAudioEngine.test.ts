@@ -13,11 +13,20 @@ class FakeGain extends FakeNode {
 
 class FakeMediaSource extends FakeNode {}
 
+class FakeBufferSource extends EventTarget {
+  buffer: AudioBuffer | null = null
+  connect = vi.fn()
+  disconnect = vi.fn()
+  start = vi.fn()
+  stop = vi.fn()
+}
+
 class FakeContext {
   state: AudioContextState = 'suspended'
   destination = new FakeNode()
   gainNodes: FakeGain[] = []
   mediaSources: FakeMediaSource[] = []
+  bufferSources: FakeBufferSource[] = []
   createGain = vi.fn(() => {
     const node = new FakeGain()
     this.gainNodes.push(node)
@@ -28,6 +37,12 @@ class FakeContext {
     this.mediaSources.push(node)
     return node
   })
+  createBufferSource = vi.fn(() => {
+    const node = new FakeBufferSource()
+    this.bufferSources.push(node)
+    return node
+  })
+  decodeAudioData = vi.fn(async () => ({ duration: 2 }) as AudioBuffer)
   resume = vi.fn(async () => {
     this.state = 'running'
   })
@@ -68,12 +83,20 @@ describe('WebAudioEngine', () => {
   let context: FakeContext
   const createObjectURL = vi.fn(() => 'blob:track')
   const revokeObjectURL = vi.fn()
+  const gongBytes = new ArrayBuffer(8)
+  const fetchGong = vi.fn(async () =>
+    Promise.resolve({
+      ok: true,
+      arrayBuffer: async () => gongBytes
+    } as Response)
+  )
 
   beforeEach(() => {
     context = new FakeContext()
     FakeAudio.instances = []
     createObjectURL.mockClear()
     revokeObjectURL.mockClear()
+    fetchGong.mockClear()
     function MockAudioContext() {
       return context
     }
@@ -83,6 +106,7 @@ describe('WebAudioEngine', () => {
     })
     vi.stubGlobal('Audio', FakeAudio)
     vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
+    vi.stubGlobal('fetch', fetchGong)
   })
 
   it('loads metadata from object URLs and connects each media element once', async () => {
@@ -162,17 +186,20 @@ describe('WebAudioEngine', () => {
     const engine = new WebAudioEngine()
 
     await engine.prepareCompletionGong()
-    const gong = FakeAudio.instances[0]
-    expect(gong.src).toBe('/audio/built-in/gong.ogg')
-    expect(gong.preload).toBe('auto')
     expect(context.resume).toHaveBeenCalledOnce()
-    expect(context.createMediaElementSource).toHaveBeenCalledWith(gong)
+    expect(fetchGong).toHaveBeenCalledWith('/audio/built-in/gong.ogg')
+    expect(context.decodeAudioData).toHaveBeenCalledWith(gongBytes)
 
-    gong.currentTime = 12
     await engine.playCompletionGong()
-    expect(FakeAudio.instances).toHaveLength(1)
-    expect(gong.currentTime).toBe(0)
-    expect(gong.play).toHaveBeenCalledOnce()
+    expect(fetchGong).toHaveBeenCalledOnce()
+    expect(context.bufferSources).toHaveLength(1)
+    const source = context.bufferSources[0]
+    expect(source.buffer).toEqual({ duration: 2 })
+    expect(source.connect).toHaveBeenCalledWith(context.gainNodes[0])
+    expect(source.start).toHaveBeenCalledOnce()
+
+    source.dispatchEvent(new Event('ended'))
+    expect(source.disconnect).toHaveBeenCalledOnce()
   })
 
   it('categorizes media errors and revokes failed object URLs', async () => {
