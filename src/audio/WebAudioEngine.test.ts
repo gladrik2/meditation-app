@@ -281,6 +281,21 @@ describe('WebAudioEngine', () => {
     expect(context.gainNodes[0].gain.value).toBe(0.75)
   })
 
+  it('bypasses the output limiter when requested in the page URL', () => {
+    const originalUrl = window.location.href
+    window.history.replaceState({}, '', '?bypassLimiter')
+
+    const engine = new WebAudioEngine()
+    engine.setMasterVolume(0.75)
+
+    expect(context.compressors).toHaveLength(0)
+    expect(context.gainNodes[0].connect).toHaveBeenCalledWith(
+      context.destination
+    )
+    expect(context.gainNodes[0].gain.value).toBe(0.75)
+    window.history.replaceState({}, '', originalUrl)
+  })
+
   it('fades out before pausing and resumes from the same position', async () => {
     vi.useFakeTimers()
     const engine = new WebAudioEngine()
@@ -308,7 +323,7 @@ describe('WebAudioEngine', () => {
     )
     expect(rain.pause).not.toHaveBeenCalled()
     expect(volumeGain.gain.value).toBe(0.4)
-    vi.advanceTimersByTime(14)
+    vi.advanceTimersByTime(99)
     expect(rain.pause).not.toHaveBeenCalled()
     vi.advanceTimersByTime(1)
     expect(rain.pause).toHaveBeenCalledOnce()
@@ -349,7 +364,7 @@ describe('WebAudioEngine', () => {
     rain.currentTime = 8
     engine.pause('rain')
     expect(rain.pause).not.toHaveBeenCalled()
-    vi.advanceTimersByTime(15)
+    vi.advanceTimersByTime(100)
     rain.dispatchEvent(new Event('pause'))
     expect(rain.pause).toHaveBeenCalledOnce()
     expect(rain.currentTime).toBe(8)
@@ -363,7 +378,7 @@ describe('WebAudioEngine', () => {
     engine.stopAll()
     expect(rain.pause).not.toHaveBeenCalled()
     expect(wind.pause).not.toHaveBeenCalled()
-    vi.advanceTimersByTime(15)
+    vi.advanceTimersByTime(100)
     expect(rain.currentTime).toBe(0)
     expect(wind.currentTime).toBe(0)
 

@@ -25,6 +25,7 @@ interface PendingTrack {
 
 const clampVolume = (value: number) => Math.min(1, Math.max(0, value))
 const transportEnvelopeSeconds = 0.015
+const transportPauseDelayMilliseconds = 100
 const completionGongUrl = `${import.meta.env.BASE_URL}audio/built-in/gong.ogg`
 
 export class WebAudioEngine implements AudioEngine {
@@ -38,6 +39,12 @@ export class WebAudioEngine implements AudioEngine {
   private completionGongLoad: Promise<void> | null = null
   private readonly completionGongSources = new Set<AudioBufferSourceNode>()
   private disposed = false
+
+  constructor(
+    private readonly bypassOutputLimiter = new URLSearchParams(
+      window.location.search
+    ).has('bypassLimiter')
+  ) {}
 
   subscribe(listener: AudioTransportListener): () => void {
     this.listeners.add(listener)
@@ -59,14 +66,18 @@ export class WebAudioEngine implements AudioEngine {
         throw new Error('Web Audio is not supported by this browser.')
       this.context = new AudioContextConstructor()
       this.masterGain = this.context.createGain()
-      this.outputLimiter = this.context.createDynamicsCompressor()
-      this.outputLimiter.threshold.value = -1
-      this.outputLimiter.knee.value = 0
-      this.outputLimiter.ratio.value = 20
-      this.outputLimiter.attack.value = 0.003
-      this.outputLimiter.release.value = 0.1
-      this.masterGain.connect(this.outputLimiter)
-      this.outputLimiter.connect(this.context.destination)
+      if (this.bypassOutputLimiter) {
+        this.masterGain.connect(this.context.destination)
+      } else {
+        this.outputLimiter = this.context.createDynamicsCompressor()
+        this.outputLimiter.threshold.value = -1
+        this.outputLimiter.knee.value = 0
+        this.outputLimiter.ratio.value = 20
+        this.outputLimiter.attack.value = 0.003
+        this.outputLimiter.release.value = 0.1
+        this.masterGain.connect(this.outputLimiter)
+        this.outputLimiter.connect(this.context.destination)
+      }
     }
     return this.context
   }
@@ -249,7 +260,7 @@ export class WebAudioEngine implements AudioEngine {
     track.fadeOutTimer = setTimeout(() => {
       track.fadeOutTimer = null
       onComplete()
-    }, transportEnvelopeSeconds * 1000)
+    }, transportPauseDelayMilliseconds)
   }
 
   async prepareCompletionGong(): Promise<void> {
