@@ -168,17 +168,102 @@ describe('WebAudioEngine', () => {
     await loading
 
     engine.setTrackVolume('rain', 0.4)
-    await engine.play('rain')
-
     const volumeGain = context.gainNodes[1]
     const startGain = context.gainNodes[2]
+    let resolvePlay!: () => void
+    FakeAudio.instances[0].play.mockImplementation(
+      () => new Promise<void>((resolve) => (resolvePlay = resolve))
+    )
+
+    const playing = engine.play('rain')
+    await vi.waitFor(() =>
+      expect(FakeAudio.instances[0].play).toHaveBeenCalled()
+    )
+
     expect(startGain.gain.cancelScheduledValues).toHaveBeenCalledWith(12)
     expect(startGain.gain.setValueAtTime).toHaveBeenCalledWith(0, 12)
+    expect(startGain.gain.linearRampToValueAtTime).not.toHaveBeenCalled()
+    context.currentTime = 14
+    resolvePlay()
+    await playing
+
     expect(startGain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(
       1,
-      12.005
+      14.005
     )
     expect(volumeGain.gain.value).toBe(0.4)
+  })
+
+  it('keeps every play-all track muted until its playback starts', async () => {
+    const engine = new WebAudioEngine()
+    const file = new File(['audio'], 'rain.wav', { type: 'audio/wav' })
+    const rainLoading = engine.loadTrack('rain', file)
+    const rain = FakeAudio.instances[0]
+    rain.metadata(20)
+    await rainLoading
+    const windLoading = engine.loadTrack('wind', file)
+    const wind = FakeAudio.instances[1]
+    wind.metadata(30)
+    await windLoading
+    let resolveRain!: () => void
+    let resolveWind!: () => void
+    rain.play.mockImplementation(
+      () => new Promise<void>((resolve) => (resolveRain = resolve))
+    )
+    wind.play.mockImplementation(
+      () => new Promise<void>((resolve) => (resolveWind = resolve))
+    )
+
+    const playing = engine.playAll(['rain', 'wind'])
+    await vi.waitFor(() => {
+      expect(rain.play).toHaveBeenCalled()
+      expect(wind.play).toHaveBeenCalled()
+    })
+    const rainStartGain = context.gainNodes[2]
+    const windStartGain = context.gainNodes[4]
+    expect(rainStartGain.gain.setValueAtTime).toHaveBeenCalledWith(0, 12)
+    expect(windStartGain.gain.setValueAtTime).toHaveBeenCalledWith(0, 12)
+    expect(rainStartGain.gain.linearRampToValueAtTime).not.toHaveBeenCalled()
+    expect(windStartGain.gain.linearRampToValueAtTime).not.toHaveBeenCalled()
+
+    context.currentTime = 15
+    resolveRain()
+    await vi.waitFor(() =>
+      expect(rainStartGain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(
+        1,
+        15.005
+      )
+    )
+    expect(windStartGain.gain.linearRampToValueAtTime).not.toHaveBeenCalled()
+    context.currentTime = 16
+    resolveWind()
+    await playing
+    expect(windStartGain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(
+      1,
+      16.005
+    )
+  })
+
+  it('restores start gain when playback is rejected', async () => {
+    const engine = new WebAudioEngine()
+    const loading = engine.loadTrack(
+      'rain',
+      new File(['audio'], 'rain.wav', { type: 'audio/wav' })
+    )
+    const rain = FakeAudio.instances[0]
+    rain.metadata(20)
+    await loading
+    rain.play.mockImplementation(async () => {
+      context.currentTime = 13
+      throw new Error('Playback was blocked.')
+    })
+
+    await expect(engine.play('rain')).rejects.toThrow('Playback was blocked.')
+
+    const startGain = context.gainNodes[2]
+    expect(startGain.gain.setValueAtTime).toHaveBeenNthCalledWith(1, 0, 12)
+    expect(startGain.gain.setValueAtTime).toHaveBeenNthCalledWith(2, 1, 13)
+    expect(startGain.gain.linearRampToValueAtTime).not.toHaveBeenCalled()
   })
 
   it('limits the summed master output without changing master volume', () => {

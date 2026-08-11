@@ -185,9 +185,7 @@ export class WebAudioEngine implements AudioEngine {
     const context = await this.resume()
     const track = this.tracks.get(id)
     if (!track) return
-    if (track.element.ended) track.element.currentTime = 0
-    this.applyStartEnvelope(track, context.currentTime)
-    await track.element.play()
+    await this.startTrack(track, context)
   }
 
   pause(id: TrackId): void {
@@ -200,18 +198,31 @@ export class WebAudioEngine implements AudioEngine {
       ids.map(async (id) => {
         const track = this.tracks.get(id)
         if (!track) return
-        if (track.element.ended) track.element.currentTime = 0
-        this.applyStartEnvelope(track, context.currentTime)
-        await track.element.play()
+        await this.startTrack(track, context)
       })
     )
   }
 
-  private applyStartEnvelope(track: EngineTrack, startTime: number): void {
+  private async startTrack(
+    track: EngineTrack,
+    context: AudioContext
+  ): Promise<void> {
+    if (track.element.ended) track.element.currentTime = 0
     const gain = track.startGain.gain
-    gain.cancelScheduledValues(startTime)
-    gain.setValueAtTime(0, startTime)
-    gain.linearRampToValueAtTime(1, startTime + startEnvelopeSeconds)
+    const muteTime = context.currentTime
+    gain.cancelScheduledValues(muteTime)
+    gain.setValueAtTime(0, muteTime)
+    try {
+      await track.element.play()
+    } catch (error) {
+      const restoreTime = context.currentTime
+      gain.cancelScheduledValues(restoreTime)
+      gain.setValueAtTime(1, restoreTime)
+      throw error
+    }
+    const fadeStartTime = context.currentTime
+    gain.setValueAtTime(0, fadeStartTime)
+    gain.linearRampToValueAtTime(1, fadeStartTime + startEnvelopeSeconds)
   }
 
   async prepareCompletionGong(): Promise<void> {
