@@ -18,7 +18,7 @@ const portraitViewportImage = Buffer.from(`
 `)
 
 async function uploadLargeImage(page: Page) {
-  await page.goto('/')
+  await page.goto('./')
   await page.locator('#audio-files').setInputFiles({
     name: 'large-edge-image.svg',
     mimeType: 'image/svg+xml',
@@ -55,7 +55,7 @@ test('smaller image expands until its limiting edges meet the viewport', async (
   page
 }) => {
   await page.setViewportSize({ width: 1920, height: 1162 })
-  await page.goto('/')
+  await page.goto('./')
   await page.locator('#audio-files').setInputFiles({
     name: '1152-by-896.svg',
     mimeType: 'image/svg+xml',

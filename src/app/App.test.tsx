@@ -375,6 +375,40 @@ describe('App', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  it('reports gong failures without preventing countdown completion', async () => {
+    vi.useFakeTimers()
+    const engine = createMockEngine()
+    const prepareError = new Error('gong load failed')
+    const playbackError = new Error('gong playback failed')
+    vi.mocked(engine.prepareCompletionGong).mockRejectedValue(prepareError)
+    vi.mocked(engine.playCompletionGong).mockRejectedValue(playbackError)
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(<App engine={engine} />)
+
+    fireEvent.change(screen.getByLabelText('Timer type'), {
+      target: { value: 'countdown' }
+    })
+    fireEvent.change(screen.getByLabelText('Minutes'), {
+      target: { value: '1' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Start Meditation/ }))
+    await act(async () => {})
+
+    expect(consoleError).toHaveBeenCalledWith(
+      'Failed to prepare the completion gong.',
+      prepareError
+    )
+
+    await act(() => vi.advanceTimersByTimeAsync(60_000))
+
+    expect(screen.getByText('Meditation completed')).toBeInTheDocument()
+    expect(engine.stopAll).toHaveBeenCalledOnce()
+    expect(consoleError).toHaveBeenCalledWith(
+      'Failed to play the completion gong.',
+      playbackError
+    )
+  })
+
   it('optionally starts audio and full screens the image with meditation', async () => {
     const user = userEvent.setup()
     const engine = createMockEngine()

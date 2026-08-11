@@ -22,6 +22,7 @@ interface PendingTrack {
 }
 
 const clampVolume = (value: number) => Math.min(1, Math.max(0, value))
+const completionGongUrl = `${import.meta.env.BASE_URL}audio/built-in/gong.ogg`
 
 export class WebAudioEngine implements AudioEngine {
   private context: AudioContext | null = null
@@ -193,7 +194,7 @@ export class WebAudioEngine implements AudioEngine {
     const context = await this.resume()
     if (this.completionGongBuffer) return
     if (!this.completionGongLoad) {
-      this.completionGongLoad = fetch('/audio/built-in/gong.ogg')
+      this.completionGongLoad = fetch(completionGongUrl)
         .then((response) => {
           if (!response.ok)
             throw new Error('The completion gong could not load.')
