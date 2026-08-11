@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 type TimerMode = 'stopwatch' | 'countdown'
 
 interface MeditationTimerProps {
+  onStart: () => void | Promise<void>
   onStartWithMedia: () => void | Promise<void>
   onComplete: () => void
 }
@@ -16,6 +17,7 @@ const formatTime = (totalSeconds: number) => {
 }
 
 export function MeditationTimer({
+  onStart,
   onStartWithMedia,
   onComplete
 }: MeditationTimerProps) {
@@ -68,6 +70,7 @@ export function MeditationTimer({
       mode === 'countdown' && displayedSeconds === 0 ? 0 : elapsedSeconds
     startedAt.current = Date.now()
     setIsRunning(true)
+    if (mode === 'countdown') void onStart()
     if (startMedia) void onStartWithMedia()
   }
 

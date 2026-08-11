@@ -92,12 +92,20 @@ export function App({ engine: suppliedEngine }: AppProps) {
             onRemove={() => setImage(null)}
           />
           <MeditationTimer
+            onStart={() => {
+              void engine.prepareCompletionGong().catch((error: unknown) => {
+                console.error('Failed to prepare the completion gong.', error)
+              })
+            }}
             onStartWithMedia={() => {
               imageRef.current?.enterFullscreen()
               return controls.playAll()
             }}
             onComplete={() => {
               controls.stopAll()
+              void engine.playCompletionGong().catch((error: unknown) => {
+                console.error('Failed to play the completion gong.', error)
+              })
               imageRef.current?.showCompletionBlackout()
             }}
           />

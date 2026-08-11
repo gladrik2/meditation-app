@@ -22,6 +22,7 @@ interface PendingTrack {
 }
 
 const clampVolume = (value: number) => Math.min(1, Math.max(0, value))
+const completionGongUrl = `${import.meta.env.BASE_URL}audio/built-in/gong.ogg`
 
 export class WebAudioEngine implements AudioEngine {
   private context: AudioContext | null = null
@@ -29,6 +30,9 @@ export class WebAudioEngine implements AudioEngine {
   private readonly tracks = new Map<TrackId, EngineTrack>()
   private readonly pendingTracks = new Map<TrackId, PendingTrack>()
   private readonly listeners = new Set<AudioTransportListener>()
+  private completionGongBuffer: AudioBuffer | null = null
+  private completionGongLoad: Promise<void> | null = null
+  private readonly completionGongSources = new Set<AudioBufferSourceNode>()
   private disposed = false
 
   subscribe(listener: AudioTransportListener): () => void {
@@ -186,6 +190,41 @@ export class WebAudioEngine implements AudioEngine {
     )
   }
 
+  async prepareCompletionGong(): Promise<void> {
+    const context = await this.resume()
+    if (this.completionGongBuffer) return
+    if (!this.completionGongLoad) {
+      this.completionGongLoad = fetch(completionGongUrl)
+        .then((response) => {
+          if (!response.ok)
+            throw new Error('The completion gong could not load.')
+          return response.arrayBuffer()
+        })
+        .then((data) => context.decodeAudioData(data))
+        .then((buffer) => {
+          this.completionGongBuffer = buffer
+        })
+        .catch((error: unknown) => {
+          this.completionGongLoad = null
+          throw error
+        })
+    }
+    await this.completionGongLoad
+  }
+
+  async playCompletionGong(): Promise<void> {
+    await this.prepareCompletionGong()
+    const source = this.getContext().createBufferSource()
+    source.buffer = this.completionGongBuffer
+    source.connect(this.masterGain!)
+    source.addEventListener('ended', () => {
+      source.disconnect()
+      this.completionGongSources.delete(source)
+    })
+    this.completionGongSources.add(source)
+    source.start()
+  }
+
   stopAll(): void {
     for (const track of this.tracks.values()) {
       track.element.pause()
@@ -227,6 +266,13 @@ export class WebAudioEngine implements AudioEngine {
     this.disposed = true
     for (const pending of [...this.pendingTracks.values()]) pending.cancel()
     for (const id of [...this.tracks.keys()]) this.removeTrack(id)
+    for (const source of this.completionGongSources) {
+      source.stop()
+      source.disconnect()
+    }
+    this.completionGongSources.clear()
+    this.completionGongBuffer = null
+    this.completionGongLoad = null
     this.masterGain?.disconnect()
     if (this.context && this.context.state !== 'closed')
       await this.context.close()

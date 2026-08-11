@@ -28,6 +28,8 @@ export function createMockEngine(): MockAudioEngine {
     playAll: vi.fn(async (ids: string[]) => {
       for (const id of ids) emit({ id, state: 'playing' })
     }),
+    prepareCompletionGong: vi.fn().mockResolvedValue(undefined),
+    playCompletionGong: vi.fn().mockResolvedValue(undefined),
     stopAll: vi.fn(() => {
       for (const id of [...playingIds]) emit({ id, state: 'paused' })
     }),
