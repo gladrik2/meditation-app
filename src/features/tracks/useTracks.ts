@@ -48,6 +48,10 @@ export function useTracks(engine: AudioEngine) {
   const counter = useRef(0)
   const tracksRef = useRef(tracks)
   const lastEffectPlay = useRef(new Map<string, number>())
+  const pendingDispose = useRef<{
+    engine: AudioEngine
+    timer: number
+  } | null>(null)
 
   useEffect(() => {
     tracksRef.current = tracks
@@ -91,7 +95,24 @@ export function useTracks(engine: AudioEngine) {
     return () => window.clearInterval(timer)
   }, [engine])
 
-  useEffect(() => () => void engine.dispose(), [engine])
+  useEffect(() => {
+    // React Strict Mode immediately repeats effect setup in development. Give
+    // that setup a chance to cancel disposal while still cleaning up a real
+    // unmount on the next task.
+    if (pendingDispose.current?.engine === engine) {
+      window.clearTimeout(pendingDispose.current.timer)
+      pendingDispose.current = null
+    }
+
+    return () => {
+      const timer = window.setTimeout(() => {
+        if (pendingDispose.current?.timer === timer)
+          pendingDispose.current = null
+        void engine.dispose()
+      })
+      pendingDispose.current = { engine, timer }
+    }
+  }, [engine])
 
   const addFiles = useCallback(
     async (files: FileList | File[]) => {
