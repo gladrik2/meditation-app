@@ -458,11 +458,10 @@ describe('App', () => {
     ).toBeInTheDocument()
   })
 
-  it('classifies short audio and plays it by chance with a ten-second cooldown', async () => {
+  it('classifies short audio and configures its random playback chance', async () => {
     vi.useFakeTimers()
     const engine = createMockEngine()
     vi.mocked(engine.loadTrack).mockResolvedValue(10)
-    vi.spyOn(Math, 'random').mockReturnValue(0)
     render(<App engine={engine} />)
 
     fireEvent.change(
@@ -483,15 +482,47 @@ describe('App', () => {
     expect(
       screen.getByText('Sound effect · random playback enabled')
     ).toBeInTheDocument()
-    await vi.advanceTimersByTimeAsync(1000)
-    expect(engine.play).toHaveBeenCalledTimes(1)
-    await vi.advanceTimersByTimeAsync(9000)
-    expect(engine.play).toHaveBeenCalledTimes(1)
-    await vi.advanceTimersByTimeAsync(1000)
-    expect(engine.play).toHaveBeenCalledTimes(2)
-    act(() => engine.emit({ id: 'track-0', state: 'ended' }))
     expect(
       screen.getByRole('button', { name: 'Disable bell.wav' })
     ).toBeInTheDocument()
   })
+
+  it.each([
+    { chance: 50, expectedIntervalSeconds: 60 },
+    { chance: 25, expectedIntervalSeconds: 35 }
+  ])(
+    'plays a 1 in $chance effect at its intended long-run frequency',
+    async ({ chance, expectedIntervalSeconds }) => {
+      vi.useFakeTimers()
+      const engine = createMockEngine()
+      vi.mocked(engine.loadTrack).mockResolvedValue(10)
+      let randomCalls = 0
+      const random = vi.spyOn(Math, 'random').mockImplementation(() => {
+        randomCalls += 1
+        return randomCalls % chance === 0 ? 0 : 0.5
+      })
+      render(<App engine={engine} />)
+
+      fireEvent.change(
+        document.querySelector<HTMLInputElement>('#audio-files')!,
+        { target: { files: [audioFile('bell.wav')] } }
+      )
+      await act(async () => {})
+      fireEvent.change(screen.getByLabelText(/Play chance each second/), {
+        target: { value: String(chance) }
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Enable bell.wav' }))
+
+      await vi.advanceTimersByTimeAsync((chance - 1) * 1000)
+      expect(engine.play).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(engine.play).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync((expectedIntervalSeconds - 1) * 1000)
+      expect(engine.play).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(engine.play).toHaveBeenCalledTimes(2)
+      expect(random).toHaveBeenCalledTimes(chance * 2)
+    }
+  )
 })
