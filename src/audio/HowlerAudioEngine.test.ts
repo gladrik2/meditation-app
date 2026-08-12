@@ -117,8 +117,14 @@ describe('HowlerAudioEngine', () => {
     expect(gong.options).toMatchObject({ html5: false, format: ['ogg'] })
     gong.fire('load')
     await gongLoading
+    engine.setMasterVolume(0.4)
     await engine.playCompletionGong()
     expect(gong.play).toHaveBeenCalledOnce()
+    expect(gong.volume).toHaveBeenCalledWith(0)
+
+    gong.fire('play', 1)
+    expect(gong.volume).toHaveBeenCalledWith(0, 1)
+    expect(gong.fade).toHaveBeenCalledWith(0, 0.4, 20, 1)
   })
 
   it('preserves transport events and releases local object URLs', async () => {

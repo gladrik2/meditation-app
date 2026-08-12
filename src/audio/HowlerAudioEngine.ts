@@ -188,7 +188,11 @@ export class HowlerAudioEngine implements AudioEngine {
           format: ['ogg'],
           html5: false,
           preload: true,
-          volume: this.masterVolume
+          volume: 0,
+          onplay: (soundId) => {
+            gong.volume(0, soundId)
+            gong.fade(0, this.masterVolume, STARTUP_FADE_MS, soundId)
+          }
         })
         this.completionGong = gong
         gong.once('load', () => resolve())
@@ -206,6 +210,7 @@ export class HowlerAudioEngine implements AudioEngine {
 
   async playCompletionGong(): Promise<void> {
     await this.prepareCompletionGong()
+    this.completionGong?.volume(0)
     this.completionGong?.play()
   }
 
