@@ -7,25 +7,12 @@ import {
   type TrackId
 } from './types'
 
-interface BaseTrack {
+interface EngineTrack {
+  howl: Howl
   url: string
   volume: number
-}
-
-interface EffectTrack extends BaseTrack {
-  kind: 'effect'
-  howl: Howl
   soundId?: number
 }
-
-interface LongTrack extends BaseTrack {
-  kind: 'long'
-  element: HTMLAudioElement
-  fadeFrame?: number
-  removeTransportListeners: () => void
-}
-
-type EngineTrack = EffectTrack | LongTrack
 
 interface PendingTrack {
   url: string
@@ -45,7 +32,7 @@ const fileFormat = (file: File): string | undefined => {
   return subtype?.replace('x-', '')
 }
 
-/** Hybrid audio engine. Long tracks use persistent HTML audio elements while
+/** Howler-backed audio engine. Long tracks stream through HTML5 Audio while
  * short effects use Howler's shared Web Audio context. */
 export class HowlerAudioEngine implements AudioEngine {
   private readonly tracks = new Map<TrackId, EngineTrack>()
@@ -79,13 +66,10 @@ export class HowlerAudioEngine implements AudioEngine {
     return new Promise<number>((resolve, reject) => {
       let settled = false
       let activeHowl: Howl | null = null
-      const cleanUpProbeListeners = () => {
+      const cleanUpProbe = () => {
         element.removeEventListener('loadedmetadata', onMetadata)
         element.removeEventListener('durationchange', onMetadata)
         element.removeEventListener('error', onProbeError)
-      }
-      const releaseElement = () => {
-        cleanUpProbeListeners()
         element.pause()
         element.removeAttribute('src')
         element.load()
@@ -93,7 +77,7 @@ export class HowlerAudioEngine implements AudioEngine {
       const fail = (category: AudioLoadErrorCategory, message: string) => {
         if (settled) return
         settled = true
-        releaseElement()
+        cleanUpProbe()
         if (this.pendingTracks.get(id)?.element === element)
           this.pendingTracks.delete(id)
         activeHowl?.unload()
@@ -114,45 +98,12 @@ export class HowlerAudioEngine implements AudioEngine {
         if (settled || this.pendingTracks.get(id)?.element !== element) return
 
         const duration = element.duration
-        cleanUpProbeListeners()
-        if (duration > SOUND_EFFECT_MAX_SECONDS) {
-          settled = true
-          this.pendingTracks.delete(id)
-          const onPlay = () => this.emit(id, 'playing')
-          const onPause = () => this.emit(id, 'paused')
-          const onEnded = () => this.emit(id, 'ended')
-          const onTransportError = () => this.emit(id, 'error')
-          element.addEventListener('play', onPlay)
-          element.addEventListener('pause', onPause)
-          element.addEventListener('ended', onEnded)
-          element.addEventListener('error', onTransportError)
-          this.tracks.set(id, {
-            kind: 'long',
-            url,
-            volume: 1,
-            element,
-            removeTransportListeners: () => {
-              element.removeEventListener('play', onPlay)
-              element.removeEventListener('pause', onPause)
-              element.removeEventListener('ended', onEnded)
-              element.removeEventListener('error', onTransportError)
-            }
-          })
-          resolve(duration)
-          return
-        }
-
-        releaseElement()
-        const track: EffectTrack = {
-          kind: 'effect',
-          url,
-          volume: 1,
-          howl: undefined as unknown as Howl
-        }
+        cleanUpProbe()
+        const track = { url, volume: 1 } as EngineTrack
         const howl = new Howl({
           src: [url],
           format: fileFormat(file) ? [fileFormat(file)!] : undefined,
-          html5: false,
+          html5: duration > SOUND_EFFECT_MAX_SECONDS,
           preload: true,
           volume: 0,
           onplay: (soundId) => {
@@ -208,13 +159,6 @@ export class HowlerAudioEngine implements AudioEngine {
   async play(id: TrackId): Promise<void> {
     const track = this.tracks.get(id)
     if (!track) return
-    if (track.kind === 'long') {
-      this.cancelLongTrackFade(track)
-      track.element.volume = 0
-      await track.element.play()
-      this.fadeLongTrack(track)
-      return
-    }
     await new Promise<void>((resolve, reject) => {
       if (track.soundId !== undefined) track.howl.volume(0, track.soundId)
       const soundId = track.howl.play(track.soundId)
@@ -228,11 +172,7 @@ export class HowlerAudioEngine implements AudioEngine {
 
   pause(id: TrackId): void {
     const track = this.tracks.get(id)
-    if (!track) return
-    if (track.kind === 'long') {
-      this.cancelLongTrackFade(track)
-      track.element.pause()
-    } else if (track.soundId !== undefined) track.howl.pause(track.soundId)
+    if (track?.soundId !== undefined) track.howl.pause(track.soundId)
   }
 
   async playAll(ids: TrackId[]): Promise<void> {
@@ -271,12 +211,6 @@ export class HowlerAudioEngine implements AudioEngine {
 
   stopAll(): void {
     for (const track of this.tracks.values()) {
-      if (track.kind === 'long') {
-        this.cancelLongTrackFade(track)
-        track.element.pause()
-        track.element.currentTime = 0
-        continue
-      }
       if (track.soundId === undefined) continue
       const soundId = track.soundId
       track.howl.stop(soundId)
@@ -285,32 +219,22 @@ export class HowlerAudioEngine implements AudioEngine {
   }
 
   setTrackLoop(id: TrackId, loop: boolean): void {
-    const track = this.tracks.get(id)
-    if (!track) return
-    if (track.kind === 'long') track.element.loop = loop
-    else track.howl.loop(loop)
+    this.tracks.get(id)?.howl.loop(loop)
   }
 
   setTrackVolume(id: TrackId, volume: number): void {
     const track = this.tracks.get(id)
     if (!track) return
     track.volume = clampVolume(volume)
-    if (track.kind === 'long') {
-      if (track.fadeFrame === undefined)
-        track.element.volume = track.volume * this.masterVolume
-    } else if (track.soundId !== undefined)
+    if (track.soundId !== undefined)
       track.howl.volume(track.volume * this.masterVolume, track.soundId)
   }
 
   setMasterVolume(volume: number): void {
     this.masterVolume = clampVolume(volume)
-    for (const track of this.tracks.values()) {
-      if (track.kind === 'long') {
-        if (track.fadeFrame === undefined)
-          track.element.volume = track.volume * this.masterVolume
-      } else if (track.soundId !== undefined)
+    for (const track of this.tracks.values())
+      if (track.soundId !== undefined)
         track.howl.volume(track.volume * this.masterVolume, track.soundId)
-    }
     this.completionGong?.volume(this.masterVolume)
   }
 
@@ -318,13 +242,7 @@ export class HowlerAudioEngine implements AudioEngine {
     this.pendingTracks.get(id)?.cancel()
     const track = this.tracks.get(id)
     if (!track) return
-    if (track.kind === 'long') {
-      this.cancelLongTrackFade(track)
-      track.removeTransportListeners()
-      track.element.pause()
-      track.element.removeAttribute('src')
-      track.element.load()
-    } else track.howl.unload()
+    track.howl.unload()
     URL.revokeObjectURL(track.url)
     this.tracks.delete(id)
   }
@@ -338,22 +256,5 @@ export class HowlerAudioEngine implements AudioEngine {
     this.completionGong = null
     this.completionGongLoad = null
     this.listeners.clear()
-  }
-
-  private cancelLongTrackFade(track: LongTrack): void {
-    if (track.fadeFrame === undefined) return
-    cancelAnimationFrame(track.fadeFrame)
-    track.fadeFrame = undefined
-  }
-
-  private fadeLongTrack(track: LongTrack): void {
-    const startedAt = performance.now()
-    const step = (now: number) => {
-      const progress = Math.min(1, (now - startedAt) / STARTUP_FADE_MS)
-      track.element.volume = track.volume * this.masterVolume * progress
-      if (progress < 1) track.fadeFrame = requestAnimationFrame(step)
-      else track.fadeFrame = undefined
-    }
-    track.fadeFrame = requestAnimationFrame(step)
   }
 }

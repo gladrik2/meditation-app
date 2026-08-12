@@ -47,14 +47,8 @@ class FakeAudio extends EventTarget {
   preload = ''
   src = ''
   duration = Number.NaN
-  currentTime = 0
-  volume = 1
-  loop = false
   error: MediaError | null = null
   pause = vi.fn()
-  play = vi.fn(async () => {
-    this.dispatchEvent(new Event('play'))
-  })
   load = vi.fn()
   removeAttribute = vi.fn(() => {
     this.src = ''
@@ -74,24 +68,14 @@ class FakeAudio extends EventTarget {
 describe('HowlerAudioEngine', () => {
   const createObjectURL = vi.fn(() => 'blob:track')
   const revokeObjectURL = vi.fn()
-  let animationFrame: FrameRequestCallback | undefined
 
   beforeEach(() => {
     howler.instances.length = 0
     FakeAudio.instances.length = 0
     createObjectURL.mockClear()
     revokeObjectURL.mockClear()
-    animationFrame = undefined
     vi.stubGlobal('Audio', FakeAudio)
     vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
-    vi.stubGlobal(
-      'requestAnimationFrame',
-      vi.fn((callback: FrameRequestCallback) => {
-        animationFrame = callback
-        return 1
-      })
-    )
-    vi.stubGlobal('cancelAnimationFrame', vi.fn())
   })
 
   const finishLoad = async (duration: number, name = 'track.ogg') => {
@@ -101,44 +85,31 @@ describe('HowlerAudioEngine', () => {
       new File(['audio'], name, { type: 'audio/ogg' })
     )
     FakeAudio.instances[0].metadata(duration)
-    if (duration > 10) {
-      expect(await loading).toBe(duration)
-      return { engine, element: FakeAudio.instances[0] }
-    }
     const howl = howler.instances[0]
     howl.stateValue = 'loaded'
     howl.fire('load')
     expect(await loading).toBe(duration)
-    return { engine, howl, element: FakeAudio.instances[0] }
+    return { engine, howl }
   }
 
-  it('keeps a persistent HTMLAudioElement for long-track pause and resume', async () => {
-    const { engine, element } = await finishLoad(120)
+  it('streams long tracks with HTML5 Audio', async () => {
+    const { engine, howl } = await finishLoad(120)
 
-    expect(howler.instances).toHaveLength(0)
-    expect(element.src).toBe('blob:track')
+    expect(howl.options).toMatchObject({
+      src: ['blob:track'],
+      format: ['ogg'],
+      html5: true,
+      preload: true
+    })
     engine.setTrackLoop('track', true)
     engine.setTrackVolume('track', 0.5)
     engine.setMasterVolume(0.4)
-    expect(element.loop).toBe(true)
-
-    element.currentTime = 37
-    await engine.play('track')
-    expect(element.play).toHaveBeenCalledOnce()
-    expect(element.volume).toBe(0)
-    animationFrame?.(performance.now() + 20)
-    expect(element.volume).toBeCloseTo(0.2)
-
-    engine.pause('track')
-    expect(element.pause).toHaveBeenCalledOnce()
-    await engine.play('track')
-    expect(element.play).toHaveBeenCalledTimes(2)
-    expect(element.currentTime).toBe(37)
+    expect(howl.loop).toHaveBeenCalledWith(true)
+    expect(howl.volume).not.toHaveBeenCalledWith(0.2, expect.anything())
   })
 
   it('uses normal Howler Web Audio playback for short effects and the gong', async () => {
     const { engine, howl } = await finishLoad(4)
-    if (!howl) throw new Error('Expected a Howler effect.')
     expect(howl.options.html5).toBe(false)
 
     const gongLoading = engine.prepareCompletionGong()
@@ -151,27 +122,27 @@ describe('HowlerAudioEngine', () => {
   })
 
   it('preserves transport events and releases local object URLs', async () => {
-    const { engine, element } = await finishLoad(30)
+    const { engine, howl } = await finishLoad(30)
     const listener = vi.fn()
     engine.subscribe(listener)
 
-    await engine.play('track')
+    const playing = engine.play('track')
+    howl.fire('play', 1)
+    await playing
     expect(listener).toHaveBeenLastCalledWith({
       id: 'track',
       state: 'playing'
     })
     engine.pause('track')
-    element.dispatchEvent(new Event('pause'))
-    expect(element.pause).toHaveBeenCalledOnce()
+    expect(howl.pause).toHaveBeenCalledWith(1)
     expect(listener).toHaveBeenLastCalledWith({ id: 'track', state: 'paused' })
     engine.removeTrack('track')
-    expect(element.removeAttribute).toHaveBeenCalledWith('src')
+    expect(howl.unload).toHaveBeenCalledOnce()
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:track')
   })
 
-  it('reuses the sound ID and fades in new effect playback and resume', async () => {
-    const { engine, howl } = await finishLoad(4)
-    if (!howl) throw new Error('Expected a Howler effect.')
+  it('reuses the sound ID and fades in new playback and resume', async () => {
+    const { engine, howl } = await finishLoad(30)
     engine.setTrackVolume('track', 0.5)
     engine.setMasterVolume(0.4)
 
@@ -195,7 +166,6 @@ describe('HowlerAudioEngine', () => {
 
   it('applies the startup fade to short sound effects', async () => {
     const { engine, howl } = await finishLoad(4)
-    if (!howl) throw new Error('Expected a Howler effect.')
 
     const playing = engine.play('track')
     howl.fire('play', 1)
