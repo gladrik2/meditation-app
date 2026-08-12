@@ -11,6 +11,7 @@ interface EngineTrack {
   howl: Howl
   url: string
   volume: number
+  soundId?: number
 }
 
 interface PendingTrack {
@@ -20,6 +21,7 @@ interface PendingTrack {
 }
 
 const SOUND_EFFECT_MAX_SECONDS = 10
+const STARTUP_FADE_MS = 20
 const clampVolume = (value: number) => Math.min(1, Math.max(0, value))
 const completionGongUrl = `${import.meta.env.BASE_URL}audio/built-in/gong.ogg`
 
@@ -97,24 +99,41 @@ export class HowlerAudioEngine implements AudioEngine {
 
         const duration = element.duration
         cleanUpProbe()
+        const track = { url, volume: 1 } as EngineTrack
         const howl = new Howl({
           src: [url],
           format: fileFormat(file) ? [fileFormat(file)!] : undefined,
           html5: duration > SOUND_EFFECT_MAX_SECONDS,
           preload: true,
-          volume: this.masterVolume,
-          onplay: () => this.emit(id, 'playing'),
+          volume: 0,
+          onplay: (soundId) => {
+            howl.volume(0, soundId)
+            howl.fade(
+              0,
+              track.volume * this.masterVolume,
+              STARTUP_FADE_MS,
+              soundId
+            )
+            this.emit(id, 'playing')
+          },
           onpause: () => this.emit(id, 'paused'),
-          onstop: () => this.emit(id, 'paused'),
-          onend: () => this.emit(id, 'ended'),
+          onstop: (soundId) => {
+            if (track.soundId === soundId) track.soundId = undefined
+            this.emit(id, 'paused')
+          },
+          onend: (soundId) => {
+            if (track.soundId === soundId) track.soundId = undefined
+            this.emit(id, 'ended')
+          },
           onplayerror: () => this.emit(id, 'error')
         })
+        track.howl = howl
         activeHowl = howl
         const onLoad = () => {
           if (settled) return
           settled = true
           this.pendingTracks.delete(id)
-          this.tracks.set(id, { howl, url, volume: 1 })
+          this.tracks.set(id, track)
           resolve(duration)
         }
         const onLoadError = () => {
@@ -141,7 +160,10 @@ export class HowlerAudioEngine implements AudioEngine {
     const track = this.tracks.get(id)
     if (!track) return
     await new Promise<void>((resolve, reject) => {
-      const soundId = track.howl.play()
+      if (track.soundId !== undefined) track.howl.volume(0, track.soundId)
+      const soundId = track.howl.play(track.soundId)
+      track.soundId = soundId
+      track.howl.volume(0, soundId)
       track.howl.once('play', () => resolve(), soundId)
       track.howl.once('playerror', (_id, error) => reject(error), soundId)
       if (track.howl.playing(soundId)) resolve()
@@ -149,7 +171,8 @@ export class HowlerAudioEngine implements AudioEngine {
   }
 
   pause(id: TrackId): void {
-    this.tracks.get(id)?.howl.pause()
+    const track = this.tracks.get(id)
+    if (track?.soundId !== undefined) track.howl.pause(track.soundId)
   }
 
   async playAll(ids: TrackId[]): Promise<void> {
@@ -187,7 +210,12 @@ export class HowlerAudioEngine implements AudioEngine {
   }
 
   stopAll(): void {
-    for (const track of this.tracks.values()) track.howl.stop()
+    for (const track of this.tracks.values()) {
+      if (track.soundId === undefined) continue
+      const soundId = track.soundId
+      track.howl.stop(soundId)
+      track.soundId = undefined
+    }
   }
 
   setTrackLoop(id: TrackId, loop: boolean): void {
@@ -198,13 +226,15 @@ export class HowlerAudioEngine implements AudioEngine {
     const track = this.tracks.get(id)
     if (!track) return
     track.volume = clampVolume(volume)
-    track.howl.volume(track.volume * this.masterVolume)
+    if (track.soundId !== undefined)
+      track.howl.volume(track.volume * this.masterVolume, track.soundId)
   }
 
   setMasterVolume(volume: number): void {
     this.masterVolume = clampVolume(volume)
     for (const track of this.tracks.values())
-      track.howl.volume(track.volume * this.masterVolume)
+      if (track.soundId !== undefined)
+        track.howl.volume(track.volume * this.masterVolume, track.soundId)
     this.completionGong?.volume(this.masterVolume)
   }
 

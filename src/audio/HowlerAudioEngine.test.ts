@@ -5,12 +5,14 @@ const howler = vi.hoisted(() => {
   class FakeHowl {
     handlers = new Map<string, Array<(...args: unknown[]) => void>>()
     stateValue = 'loading'
-    play = vi.fn(() => 1)
-    pause = vi.fn(() => this.fire('pause'))
-    stop = vi.fn(() => this.fire('stop'))
+    nextSoundId = 1
+    play = vi.fn((soundId?: number) => soundId ?? this.nextSoundId++)
+    pause = vi.fn((soundId: number) => this.fire('pause', soundId))
+    stop = vi.fn((soundId: number) => this.fire('stop', soundId))
     unload = vi.fn()
     loop = vi.fn()
     volume = vi.fn()
+    fade = vi.fn()
     playing = vi.fn(() => false)
 
     constructor(public options: Record<string, unknown>) {
@@ -103,7 +105,7 @@ describe('HowlerAudioEngine', () => {
     engine.setTrackVolume('track', 0.5)
     engine.setMasterVolume(0.4)
     expect(howl.loop).toHaveBeenCalledWith(true)
-    expect(howl.volume).toHaveBeenLastCalledWith(0.2)
+    expect(howl.volume).not.toHaveBeenCalledWith(0.2, expect.anything())
   })
 
   it('uses normal Howler Web Audio playback for short effects and the gong', async () => {
@@ -132,9 +134,45 @@ describe('HowlerAudioEngine', () => {
       state: 'playing'
     })
     engine.pause('track')
+    expect(howl.pause).toHaveBeenCalledWith(1)
     expect(listener).toHaveBeenLastCalledWith({ id: 'track', state: 'paused' })
     engine.removeTrack('track')
     expect(howl.unload).toHaveBeenCalledOnce()
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:track')
+  })
+
+  it('reuses the sound ID and fades in new playback and resume', async () => {
+    const { engine, howl } = await finishLoad(30)
+    engine.setTrackVolume('track', 0.5)
+    engine.setMasterVolume(0.4)
+
+    const firstPlay = engine.play('track')
+    howl.fire('play', 1)
+    await firstPlay
+    expect(howl.play).toHaveBeenNthCalledWith(1, undefined)
+    expect(howl.volume).toHaveBeenCalledWith(0, 1)
+    expect(howl.fade).toHaveBeenCalledWith(0, 0.2, 20, 1)
+
+    engine.pause('track')
+    howl.volume.mockClear()
+    howl.fade.mockClear()
+    const resumed = engine.play('track')
+    howl.fire('play', 1)
+    await resumed
+    expect(howl.play).toHaveBeenNthCalledWith(2, 1)
+    expect(howl.volume).toHaveBeenCalledWith(0, 1)
+    expect(howl.fade).toHaveBeenCalledWith(0, 0.2, 20, 1)
+  })
+
+  it('applies the startup fade to short sound effects', async () => {
+    const { engine, howl } = await finishLoad(4)
+
+    const playing = engine.play('track')
+    howl.fire('play', 1)
+    await playing
+
+    expect(howl.options.html5).toBe(false)
+    expect(howl.volume).toHaveBeenCalledWith(0, 1)
+    expect(howl.fade).toHaveBeenCalledWith(0, 1, 20, 1)
   })
 })
