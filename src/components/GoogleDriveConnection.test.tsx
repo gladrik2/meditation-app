@@ -6,9 +6,10 @@ import { GoogleDriveConnection } from './GoogleDriveConnection'
 
 function createAuth(overrides: Partial<GoogleDriveAuth> = {}): GoogleDriveAuth {
   return {
-    connect: vi.fn().mockResolvedValue(undefined),
+    connect: vi.fn().mockResolvedValue('access-token'),
     disconnect: vi.fn().mockResolvedValue(undefined),
     isConnected: vi.fn().mockReturnValue(false),
+    getAccessToken: vi.fn().mockReturnValue(undefined),
     ...overrides
   }
 }

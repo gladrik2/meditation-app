@@ -7,6 +7,7 @@ export const GOOGLE_DRIVE_SCOPES = [
 
 interface TokenResponse {
   access_token?: string
+  expires_in?: number
   error?: string
   error_description?: string
 }
@@ -25,6 +26,7 @@ interface GoogleIdentityServices {
         error_callback: (error: { type?: string }) => void
       }): TokenClient
       revoke(token: string, callback: () => void): void
+      hasGrantedAllScopes(response: TokenResponse, ...scopes: string[]): boolean
     }
   }
 }
@@ -70,29 +72,47 @@ export function loadGoogleIdentityServices(): Promise<GoogleIdentityServices> {
 }
 
 export interface GoogleDriveAuth {
-  connect(): Promise<void>
+  connect(): Promise<string>
   disconnect(): Promise<void>
+  getAccessToken(): string | undefined
   isConnected(): boolean
 }
 
 export class BrowserGoogleDriveAuth implements GoogleDriveAuth {
   private accessToken: string | undefined
+  private expiresAt = 0
 
   constructor(private readonly clientId: string) {}
 
   isConnected() {
-    return this.accessToken !== undefined
+    return this.getAccessToken() !== undefined
+  }
+
+  getAccessToken() {
+    if (this.accessToken && Date.now() < this.expiresAt) {
+      return this.accessToken
+    }
+
+    this.accessToken = undefined
+    this.expiresAt = 0
+    return undefined
   }
 
   async connect() {
+    this.accessToken = undefined
+    this.expiresAt = 0
     const google = await loadGoogleIdentityServices()
 
-    await new Promise<void>((resolve, reject) => {
+    return new Promise<string>((resolve, reject) => {
       const client = google.accounts.oauth2.initTokenClient({
         client_id: this.clientId,
         scope: GOOGLE_DRIVE_SCOPES.join(' '),
         callback: (response) => {
-          if (response.error || !response.access_token) {
+          if (
+            response.error ||
+            !response.access_token ||
+            !response.expires_in
+          ) {
             reject(
               new Error(
                 response.error_description ??
@@ -101,8 +121,22 @@ export class BrowserGoogleDriveAuth implements GoogleDriveAuth {
             )
             return
           }
+          if (
+            !google.accounts.oauth2.hasGrantedAllScopes(
+              response,
+              ...GOOGLE_DRIVE_SCOPES
+            )
+          ) {
+            reject(
+              new Error(
+                'Google Drive requires permission for both requested scopes.'
+              )
+            )
+            return
+          }
           this.accessToken = response.access_token
-          resolve()
+          this.expiresAt = Date.now() + response.expires_in * 1000
+          resolve(response.access_token)
         },
         error_callback: (error) => {
           const cancelled = error.type === 'popup_closed'
@@ -123,6 +157,7 @@ export class BrowserGoogleDriveAuth implements GoogleDriveAuth {
   async disconnect() {
     const token = this.accessToken
     this.accessToken = undefined
+    this.expiresAt = 0
     if (!token || !window.google?.accounts.oauth2) return
 
     await new Promise<void>((resolve) => {
