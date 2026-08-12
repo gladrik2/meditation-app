@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { WebAudioEngine } from '../audio/WebAudioEngine'
+import { HowlerAudioEngine } from '../audio/HowlerAudioEngine'
 import type { AudioEngine } from '../audio/types'
 import { TrackList } from '../components/TrackList'
 import { MeditationTimer } from '../components/MeditationTimer'
@@ -16,7 +16,7 @@ interface AppProps {
 
 export function App({ engine: suppliedEngine }: AppProps) {
   const engine = useMemo(
-    () => suppliedEngine ?? new WebAudioEngine(),
+    () => suppliedEngine ?? new HowlerAudioEngine(),
     [suppliedEngine]
   )
   const inputRef = useRef<HTMLInputElement>(null)
