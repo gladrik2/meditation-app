@@ -19,7 +19,7 @@ React, strict TypeScript, Vite, the Web Audio API, `vite-plugin-pwa`, Vitest, Re
 
 ## Privacy model
 
-Audio and the optional soundscape image are read through standard browser APIs and held locally in memory. Howler.js uses its shared Web Audio context for short effects and streaming HTML5 Audio for long tracks. Files, file contents, and filenames are not uploaded, sent to analytics, or added to service-worker caches. Selected files are forgotten on refresh or close.
+Audio and the optional soundscape image are read through standard browser APIs and held locally in memory. Short effects use Howler.js and its shared Web Audio context, while long tracks use persistent HTML audio elements. Files, file contents, and filenames are not uploaded, sent to analytics, or added to service-worker caches. Selected files are forgotten on refresh or close.
 
 ## Development
 
