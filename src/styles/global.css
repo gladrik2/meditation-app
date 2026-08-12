@@ -73,6 +73,26 @@ a:focus-visible {
 main {
   flex: 1;
 }
+.drive-connection {
+  width: min(980px, calc(100% - 40px));
+  margin: 12px auto 0;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border: 1px solid #ddd9cd;
+  border-radius: 13px;
+  background: #fffefa;
+}
+.drive-connection p {
+  margin: 3px 0 0;
+  color: #65736b;
+  font-size: 0.82rem;
+}
+.drive-connection .drive-error {
+  color: #a13d2d;
+}
 .hero {
   width: min(760px, calc(100% - 40px));
   margin: 70px auto 72px;

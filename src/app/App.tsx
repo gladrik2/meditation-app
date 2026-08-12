@@ -8,13 +8,19 @@ import {
   type SoundscapeImageHandle
 } from '../components/SoundscapeImage'
 import { VolumeControl } from '../components/VolumeControl'
+import { GoogleDriveConnection } from '../components/GoogleDriveConnection'
 import { useTracks } from '../features/tracks/useTracks'
+import {
+  BrowserGoogleDriveAuth,
+  type GoogleDriveAuth
+} from '../googleDrive/googleDriveAuth'
 
 interface AppProps {
   engine?: AudioEngine
+  driveAuth?: GoogleDriveAuth
 }
 
-export function App({ engine: suppliedEngine }: AppProps) {
+export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
   const engine = useMemo(
     () => suppliedEngine ?? new HowlerAudioEngine(),
     [suppliedEngine]
@@ -24,6 +30,12 @@ export function App({ engine: suppliedEngine }: AppProps) {
   const [image, setImage] = useState<File | null>(null)
   const controls = useTracks(engine)
   const ready = controls.tracks.some((track) => track.status === 'ready')
+  const googleDriveAuth = useMemo(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim()
+    return (
+      driveAuth ?? (clientId ? new BrowserGoogleDriveAuth(clientId) : undefined)
+    )
+  }, [driveAuth])
 
   return (
     <div className="app-shell">
@@ -37,6 +49,7 @@ export function App({ engine: suppliedEngine }: AppProps) {
       </header>
 
       <main>
+        <GoogleDriveConnection auth={googleDriveAuth} />
         <section className="hero" aria-labelledby="page-title">
           <h1 id="page-title">
             Layer sounds.
