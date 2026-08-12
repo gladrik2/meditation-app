@@ -8,7 +8,12 @@ class FakeNode {
 }
 
 class FakeGain extends FakeNode {
-  gain = { value: 1 }
+  gain = {
+    value: 1,
+    cancelScheduledValues: vi.fn(),
+    setValueAtTime: vi.fn(),
+    linearRampToValueAtTime: vi.fn()
+  }
 }
 
 class FakeMediaSource extends FakeNode {}
@@ -23,6 +28,7 @@ class FakeBufferSource extends EventTarget {
 
 class FakeContext {
   state: AudioContextState = 'suspended'
+  currentTime = 4
   destination = new FakeNode()
   gainNodes: FakeGain[] = []
   mediaSources: FakeMediaSource[] = []
@@ -153,6 +159,11 @@ describe('WebAudioEngine', () => {
     expect(context.resume).toHaveBeenCalledOnce()
     expect(rain.play).toHaveBeenCalledOnce()
     expect(wind.play).toHaveBeenCalledOnce()
+    for (const gain of context.gainNodes.slice(1)) {
+      expect(gain.gain.cancelScheduledValues).toHaveBeenCalledWith(4)
+      expect(gain.gain.setValueAtTime).toHaveBeenNthCalledWith(1, 0, 4)
+      expect(gain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(1, 4.02)
+    }
     rain.dispatchEvent(new Event('play'))
     expect(listener).toHaveBeenLastCalledWith({ id: 'rain', state: 'playing' })
     rain.currentTime = 8
@@ -180,6 +191,29 @@ describe('WebAudioEngine', () => {
     expect(wind.removeAttribute).toHaveBeenCalledWith('src')
     expect(context.close).toHaveBeenCalledOnce()
     expect(revokeObjectURL).toHaveBeenCalledTimes(2)
+  })
+
+  it('silences a track before playback and fades to its intended volume', async () => {
+    const engine = new WebAudioEngine()
+    const loading = engine.loadTrack(
+      'rain',
+      new File(['audio'], 'rain.wav', { type: 'audio/wav' })
+    )
+    const rain = FakeAudio.instances[0]
+    rain.metadata(20)
+    await loading
+    const gain = context.gainNodes[1]
+    engine.setTrackVolume('rain', 0.35)
+    gain.gain.setValueAtTime.mockClear()
+    rain.play.mockImplementationOnce(async () => {
+      expect(gain.gain.setValueAtTime).toHaveBeenCalledWith(0, 4)
+    })
+
+    await engine.play('rain')
+
+    expect(gain.gain.setValueAtTime).toHaveBeenNthCalledWith(1, 0, 4)
+    expect(gain.gain.setValueAtTime).toHaveBeenNthCalledWith(2, 0, 4)
+    expect(gain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(0.35, 4.02)
   })
 
   it('prepares and plays the completion gong through the shared context', async () => {

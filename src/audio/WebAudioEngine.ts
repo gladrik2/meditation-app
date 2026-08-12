@@ -12,6 +12,7 @@ interface EngineTrack {
   element: HTMLAudioElement
   mediaSource: MediaElementAudioSourceNode
   gain: GainNode
+  volume: number
   removeTransportListeners: () => void
 }
 
@@ -22,6 +23,7 @@ interface PendingTrack {
 }
 
 const clampVolume = (value: number) => Math.min(1, Math.max(0, value))
+const fadeInDurationSeconds = 0.02
 const completionGongUrl = `${import.meta.env.BASE_URL}audio/built-in/gong.ogg`
 
 export class WebAudioEngine implements AudioEngine {
@@ -131,6 +133,7 @@ export class WebAudioEngine implements AudioEngine {
             element,
             mediaSource,
             gain,
+            volume: gain.gain.value,
             removeTransportListeners
           })
           resolve(element.duration)
@@ -167,11 +170,13 @@ export class WebAudioEngine implements AudioEngine {
   }
 
   async play(id: TrackId): Promise<void> {
-    await this.resume()
+    const context = await this.resume()
     const track = this.tracks.get(id)
     if (!track) return
     if (track.element.ended) track.element.currentTime = 0
+    this.silenceTrack(track, context.currentTime)
     await track.element.play()
+    this.fadeInTrack(track, context.currentTime)
   }
 
   pause(id: TrackId): void {
@@ -179,13 +184,15 @@ export class WebAudioEngine implements AudioEngine {
   }
 
   async playAll(ids: TrackId[]): Promise<void> {
-    await this.resume()
+    const context = await this.resume()
     await Promise.all(
       ids.map(async (id) => {
         const track = this.tracks.get(id)
         if (!track) return
         if (track.element.ended) track.element.currentTime = 0
+        this.silenceTrack(track, context.currentTime)
         await track.element.play()
+        this.fadeInTrack(track, context.currentTime)
       })
     )
   }
@@ -239,7 +246,24 @@ export class WebAudioEngine implements AudioEngine {
 
   setTrackVolume(id: TrackId, volume: number): void {
     const track = this.tracks.get(id)
-    if (track) track.gain.gain.value = clampVolume(volume)
+    if (track) {
+      track.volume = clampVolume(volume)
+      track.gain.gain.cancelScheduledValues(this.getContext().currentTime)
+      track.gain.gain.value = track.volume
+    }
+  }
+
+  private silenceTrack(track: EngineTrack, startTime: number): void {
+    track.gain.gain.cancelScheduledValues(startTime)
+    track.gain.gain.setValueAtTime(0, startTime)
+  }
+
+  private fadeInTrack(track: EngineTrack, startTime: number): void {
+    track.gain.gain.setValueAtTime(0, startTime)
+    track.gain.gain.linearRampToValueAtTime(
+      track.volume,
+      startTime + fadeInDurationSeconds
+    )
   }
 
   setMasterVolume(volume: number): void {
