@@ -1,18 +1,31 @@
 import { useState } from 'react'
+import {
+  DrivePicker,
+  DrivePickerDocsView
+} from '@googleworkspace/drive-picker-react'
 import type { GoogleDriveAuth } from '../googleDrive/googleDriveAuth'
+import {
+  downloadGoogleDriveFiles,
+  type GoogleDriveDocument
+} from '../googleDrive/googleDriveFiles'
+
+const GOOGLE_DRIVE_APP_ID = '628795874681'
 
 interface AudioSourceChooserProps {
   driveAuth?: GoogleDriveAuth
   onChooseDevice(): void
+  onChooseDriveFiles(files: File[]): void | Promise<void>
 }
 
 export function AudioSourceChooser({
   driveAuth,
-  onChooseDevice
+  onChooseDevice,
+  onChooseDriveFiles
 }: AudioSourceChooserProps) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
+  const [pickerToken, setPickerToken] = useState<string>()
 
   const close = () => {
     if (busy) return
@@ -29,11 +42,12 @@ export function AudioSourceChooser({
     setBusy(true)
     setError(undefined)
     try {
-      if (!driveAuth.getAccessToken()) {
-        await driveAuth.connect()
+      const token = driveAuth.getAccessToken() ?? (await driveAuth.connect())
+      if (!token) {
+        setOpen(false)
+        return
       }
-      // Google Picker will use the valid token here in a future change.
-      setOpen(false)
+      setPickerToken(token)
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -43,6 +57,22 @@ export function AudioSourceChooser({
     } finally {
       setBusy(false)
     }
+  }
+
+  const pickerFailed = (caught: unknown) => {
+    const oauthDescription =
+      typeof caught === 'object' && caught && 'error_description' in caught
+        ? String(caught.error_description)
+        : undefined
+    setPickerToken(undefined)
+    setOpen(true)
+    setError(
+      oauthDescription ??
+        (caught instanceof Error
+          ? caught.message
+          : 'Google Drive files could not be added.')
+    )
+    setBusy(false)
   }
 
   return (
@@ -93,6 +123,35 @@ export function AudioSourceChooser({
             </button>
           </div>
         </div>
+      )}
+      {pickerToken && (
+        <DrivePicker
+          app-id={GOOGLE_DRIVE_APP_ID}
+          oauth-token={pickerToken}
+          multiselect
+          onCanceled={() => {
+            setPickerToken(undefined)
+            setOpen(false)
+            setBusy(false)
+          }}
+          onPicked={(event) => {
+            const documents = (event.detail.docs ?? []) as GoogleDriveDocument[]
+            void downloadGoogleDriveFiles(documents, pickerToken)
+              .then(onChooseDriveFiles)
+              .then(() => {
+                setPickerToken(undefined)
+                setOpen(false)
+                setBusy(false)
+              })
+              .catch(pickerFailed)
+          }}
+          onOauthError={(event) => pickerFailed(event.detail)}
+        >
+          <DrivePickerDocsView
+            include-folders="false"
+            select-folder-enabled="false"
+          />
+        </DrivePicker>
       )}
     </>
   )

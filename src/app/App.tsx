@@ -30,6 +30,21 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
   const [image, setImage] = useState<File | null>(null)
   const controls = useTracks(engine)
   const ready = controls.tracks.some((track) => track.status === 'ready')
+  const addSelectedFiles = (files: File[]) => {
+    const audioAndUnsupportedFiles = files.filter(
+      (file) => !file.type.startsWith('image/')
+    )
+    const selectedImages = files.filter((file) =>
+      file.type.startsWith('image/')
+    )
+
+    if (audioAndUnsupportedFiles.length > 0) {
+      void controls.addFiles(audioAndUnsupportedFiles)
+    }
+    if (selectedImages.length > 0) {
+      setImage(selectedImages.at(-1) ?? null)
+    }
+  }
   const googleDriveAuth = useMemo(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim()
     return (
@@ -69,25 +84,14 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
             multiple
             onChange={(event) => {
               const files = Array.from(event.currentTarget.files ?? [])
-              const audioAndUnsupportedFiles = files.filter(
-                (file) => !file.type.startsWith('image/')
-              )
-              const selectedImages = files.filter((file) =>
-                file.type.startsWith('image/')
-              )
-
-              if (audioAndUnsupportedFiles.length > 0) {
-                void controls.addFiles(audioAndUnsupportedFiles)
-              }
-              if (selectedImages.length > 0) {
-                setImage(selectedImages.at(-1) ?? null)
-              }
+              addSelectedFiles(files)
               event.currentTarget.value = ''
             }}
           />
           <AudioSourceChooser
             driveAuth={googleDriveAuth}
             onChooseDevice={() => inputRef.current?.click()}
+            onChooseDriveFiles={addSelectedFiles}
           />
           <p className="file-help">
             Select multiple audio files and one optional image

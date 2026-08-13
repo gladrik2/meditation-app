@@ -15,6 +15,7 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@googleworkspace/drive-picker-react": "^0.2.0",
     "howler": "^2.2.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
