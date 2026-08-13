@@ -1,8 +1,7 @@
 const GIS_SCRIPT_URL = 'https://accounts.google.com/gsi/client'
 
 export const GOOGLE_DRIVE_SCOPES = [
-  'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/drive.appdata'
+  'https://www.googleapis.com/auth/drive.file'
 ] as const
 
 interface TokenResponse {
@@ -133,7 +132,7 @@ export class BrowserGoogleDriveAuth implements GoogleDriveAuth {
           ) {
             reject(
               new Error(
-                'Google Drive requires permission for both requested scopes.'
+                'Google Drive requires permission to open selected files.'
               )
             )
             return

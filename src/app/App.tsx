@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { HowlerAudioEngine } from '../audio/HowlerAudioEngine'
 import type { AudioEngine } from '../audio/types'
 import { TrackList } from '../components/TrackList'
@@ -14,13 +14,22 @@ import {
   BrowserGoogleDriveAuth,
   type GoogleDriveAuth
 } from '../googleDrive/googleDriveAuth'
+import {
+  BrowserGoogleDrivePicker,
+  type GoogleDrivePicker
+} from '../googleDrive/googleDrivePicker'
 
 interface AppProps {
   engine?: AudioEngine
   driveAuth?: GoogleDriveAuth
+  drivePicker?: GoogleDrivePicker
 }
 
-export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
+export function App({
+  engine: suppliedEngine,
+  driveAuth,
+  drivePicker
+}: AppProps) {
   const engine = useMemo(
     () => suppliedEngine ?? new HowlerAudioEngine(),
     [suppliedEngine]
@@ -29,6 +38,7 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
   const imageRef = useRef<SoundscapeImageHandle>(null)
   const [image, setImage] = useState<File | null>(null)
   const controls = useTracks(engine)
+  const addFiles = controls.addFiles
   const ready = controls.tracks.some((track) => track.status === 'ready')
   const googleDriveAuth = useMemo(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim()
@@ -36,6 +46,32 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
       driveAuth ?? (clientId ? new BrowserGoogleDriveAuth(clientId) : undefined)
     )
   }, [driveAuth])
+  const googleDrivePicker = useMemo(() => {
+    const apiKey = import.meta.env.VITE_GOOGLE_API_KEY?.trim()
+    const appId = import.meta.env.VITE_GOOGLE_APP_ID?.trim()
+    return (
+      drivePicker ??
+      (apiKey ? new BrowserGoogleDrivePicker(apiKey, appId) : undefined)
+    )
+  }, [drivePicker])
+  const addSelectedFiles = useCallback(
+    (files: File[]) => {
+      const audioAndUnsupportedFiles = files.filter(
+        (file) => !file.type.startsWith('image/')
+      )
+      const selectedImages = files.filter((file) =>
+        file.type.startsWith('image/')
+      )
+
+      if (audioAndUnsupportedFiles.length > 0) {
+        void addFiles(audioAndUnsupportedFiles)
+      }
+      if (selectedImages.length > 0) {
+        setImage(selectedImages.at(-1) ?? null)
+      }
+    },
+    [addFiles]
+  )
 
   return (
     <div className="app-shell">
@@ -57,8 +93,8 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
           </h1>
           <p className="intro">
             Mix multiple audio tracks into a personal soundscape. Audio is
-            processed locally in your browser. Local files are never uploaded by
-            this app.
+            processed locally in your browser. Selected files are never uploaded
+            by this app.
           </p>
           <input
             ref={inputRef}
@@ -69,24 +105,14 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
             multiple
             onChange={(event) => {
               const files = Array.from(event.currentTarget.files ?? [])
-              const audioAndUnsupportedFiles = files.filter(
-                (file) => !file.type.startsWith('image/')
-              )
-              const selectedImages = files.filter((file) =>
-                file.type.startsWith('image/')
-              )
-
-              if (audioAndUnsupportedFiles.length > 0) {
-                void controls.addFiles(audioAndUnsupportedFiles)
-              }
-              if (selectedImages.length > 0) {
-                setImage(selectedImages.at(-1) ?? null)
-              }
+              addSelectedFiles(files)
               event.currentTarget.value = ''
             }}
           />
           <AudioSourceChooser
             driveAuth={googleDriveAuth}
+            drivePicker={googleDrivePicker}
+            onChooseFiles={addSelectedFiles}
             onChooseDevice={() => inputRef.current?.click()}
           />
           <p className="file-help">
@@ -157,8 +183,9 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
 
       <footer>
         <p>
-          Audio is processed locally in your browser. Local files are never
-          uploaded by this app and are forgotten when you close or refresh it.
+          Audio is processed locally in your browser. Device and Google Drive
+          files are never uploaded by this app and are forgotten when you close
+          or refresh it.
         </p>
       </footer>
     </div>

@@ -20,8 +20,11 @@ describe('App', () => {
     render(<App engine={createMockEngine()} />)
     expect(screen.getByText('Your soundscape is empty')).toBeInTheDocument()
     expect(
-      screen.getAllByText(/local files are never uploaded by this app/i)
-    ).toHaveLength(2)
+      screen.getByText(/selected files are never uploaded by this app/i)
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/device and Google Drive files are never uploaded/i)
+    ).toBeInTheDocument()
   })
 
   it('loads multiple selected audio files and removes a track', async () => {

@@ -4,7 +4,7 @@ Local Soundscape is a client-side audio mixer for layering local audio into a pe
 
 ## Current capabilities
 
-- Select multiple local audio files and one optional image through one upload control.
+- Select multiple audio files and one optional image from the device or Google Drive.
 - Play or pause each track, or start all ready tracks together.
 - Treat audio of 10 seconds or less as a sound effect, with an adjustable random per-second playback chance and a 10-second cooldown.
 - Adjust per-track and master volume and stop all playback.
@@ -19,7 +19,7 @@ React, strict TypeScript, Vite, the Web Audio API, `vite-plugin-pwa`, Vitest, Re
 
 ## Privacy model
 
-Audio and the optional soundscape image are read through standard browser APIs and held locally in memory. Howler.js uses its shared Web Audio context for short effects and streaming HTML5 Audio for long tracks. Files, file contents, and filenames are not uploaded, sent to analytics, or added to service-worker caches. Selected files are forgotten on refresh or close.
+Audio and the optional soundscape image are held locally in browser memory. Device files are read through standard browser APIs; selected Google Drive files are fetched directly from the Drive API into the browser and are not copied anywhere else. Howler.js uses its shared Web Audio context for short effects and streaming HTML5 Audio for long tracks. Files, file contents, and filenames are not uploaded by the app, sent to analytics, or added to service-worker caches. Selected files are forgotten on refresh or close.
 
 ## Development
 

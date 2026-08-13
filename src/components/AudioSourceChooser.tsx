@@ -1,13 +1,18 @@
 import { useState } from 'react'
 import type { GoogleDriveAuth } from '../googleDrive/googleDriveAuth'
+import type { GoogleDrivePicker } from '../googleDrive/googleDrivePicker'
 
 interface AudioSourceChooserProps {
   driveAuth?: GoogleDriveAuth
+  drivePicker?: GoogleDrivePicker
+  onChooseFiles(files: File[]): void
   onChooseDevice(): void
 }
 
 export function AudioSourceChooser({
   driveAuth,
+  drivePicker,
+  onChooseFiles,
   onChooseDevice
 }: AudioSourceChooserProps) {
   const [open, setOpen] = useState(false)
@@ -21,7 +26,7 @@ export function AudioSourceChooser({
   }
 
   const chooseDrive = async () => {
-    if (!driveAuth) {
+    if (!driveAuth || !drivePicker) {
       setError('Google Drive is not configured for this app.')
       return
     }
@@ -29,10 +34,17 @@ export function AudioSourceChooser({
     setBusy(true)
     setError(undefined)
     try {
-      if (!driveAuth.getAccessToken()) {
-        await driveAuth.connect()
+      const token = driveAuth.getAccessToken() ?? (await driveAuth.connect())
+      if (!token) {
+        setOpen(false)
+        return
       }
-      // Google Picker will use the valid token here in a future change.
+      const files = await drivePicker.pickFiles(token)
+      if (!files) {
+        setOpen(false)
+        return
+      }
+      onChooseFiles(files)
       setOpen(false)
     } catch (caught) {
       setError(
