@@ -24,6 +24,7 @@ export function AudioSourceChooser({
 }: AudioSourceChooserProps) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState<string>()
   const [pickerToken, setPickerToken] = useState<string>()
 
@@ -31,6 +32,7 @@ export function AudioSourceChooser({
     if (busy) return
     setOpen(false)
     setError(undefined)
+    setDownloading(false)
   }
 
   const chooseDrive = async () => {
@@ -73,6 +75,7 @@ export function AudioSourceChooser({
           : 'Google Drive files could not be added.')
     )
     setBusy(false)
+    setDownloading(false)
   }
 
   return (
@@ -99,6 +102,7 @@ export function AudioSourceChooser({
             <h2 id="source-chooser-title">Add files</h2>
             <button
               type="button"
+              disabled={busy}
               onClick={() => {
                 setOpen(false)
                 onChooseDevice()
@@ -111,12 +115,17 @@ export function AudioSourceChooser({
               disabled={busy}
               onClick={() => void chooseDrive()}
             >
-              {busy ? 'Connecting…' : 'From Google Drive'}
+              {downloading
+                ? 'Downloading…'
+                : busy
+                  ? 'Connecting…'
+                  : 'From Google Drive'}
             </button>
             {error && <p className="source-chooser-error">{error}</p>}
             <button
               className="source-chooser-cancel"
               type="button"
+              disabled={busy}
               onClick={close}
             >
               Cancel
@@ -136,12 +145,16 @@ export function AudioSourceChooser({
           }}
           onPicked={(event) => {
             const documents = (event.detail.docs ?? []) as GoogleDriveDocument[]
+            setPickerToken(undefined)
+            setBusy(true)
+            setDownloading(true)
             void downloadGoogleDriveFiles(documents, pickerToken)
               .then(onChooseDriveFiles)
               .then(() => {
                 setPickerToken(undefined)
                 setOpen(false)
                 setBusy(false)
+                setDownloading(false)
               })
               .catch(pickerFailed)
           }}

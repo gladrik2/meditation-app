@@ -127,6 +127,40 @@ describe('AudioSourceChooser', () => {
     )
   })
 
+  it('disables the source chooser while picked files are downloading', async () => {
+    const user = userEvent.setup()
+    let finishDownload: ((response: Response) => void) | undefined
+    vi.spyOn(globalThis, 'fetch').mockReturnValue(
+      new Promise((resolve) => {
+        finishDownload = resolve
+      })
+    )
+    render(
+      <AudioSourceChooser
+        driveAuth={createAuth({
+          getAccessToken: vi.fn().mockReturnValue('token')
+        })}
+        {...props}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Add files' }))
+    await user.click(screen.getByRole('button', { name: 'From Google Drive' }))
+    await user.click(screen.getByRole('button', { name: 'Pick Drive files' }))
+
+    expect(
+      screen.getByRole('button', { name: 'From this device' })
+    ).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Downloading…' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    expect(screen.queryByTestId('drive-picker')).not.toBeInTheDocument()
+
+    finishDownload?.({
+      ok: true,
+      blob: vi.fn().mockResolvedValue(new Blob(['audio']))
+    } as unknown as Response)
+  })
+
   it('closes silently when the Picker is canceled', async () => {
     const user = userEvent.setup()
     render(
