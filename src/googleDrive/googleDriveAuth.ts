@@ -72,7 +72,7 @@ export function loadGoogleIdentityServices(): Promise<GoogleIdentityServices> {
 }
 
 export interface GoogleDriveAuth {
-  connect(): Promise<string>
+  connect(): Promise<string | undefined>
   disconnect(): Promise<void>
   getAccessToken(): string | undefined
   isConnected(): boolean
@@ -103,11 +103,15 @@ export class BrowserGoogleDriveAuth implements GoogleDriveAuth {
     this.expiresAt = 0
     const google = await loadGoogleIdentityServices()
 
-    return new Promise<string>((resolve, reject) => {
+    return new Promise<string | undefined>((resolve, reject) => {
       const client = google.accounts.oauth2.initTokenClient({
         client_id: this.clientId,
         scope: GOOGLE_DRIVE_SCOPES.join(' '),
         callback: (response) => {
+          if (response.error === 'access_denied') {
+            resolve(undefined)
+            return
+          }
           if (
             response.error ||
             !response.access_token ||
@@ -139,13 +143,12 @@ export class BrowserGoogleDriveAuth implements GoogleDriveAuth {
           resolve(response.access_token)
         },
         error_callback: (error) => {
-          const cancelled = error.type === 'popup_closed'
+          if (error.type === 'popup_closed') {
+            resolve(undefined)
+            return
+          }
           reject(
-            new Error(
-              cancelled
-                ? 'Google Drive authorization was cancelled.'
-                : 'Google Drive authorization could not be completed.'
-            )
+            new Error('Google Drive authorization could not be completed.')
           )
         }
       })

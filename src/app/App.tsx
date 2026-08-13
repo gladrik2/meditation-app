@@ -8,7 +8,7 @@ import {
   type SoundscapeImageHandle
 } from '../components/SoundscapeImage'
 import { VolumeControl } from '../components/VolumeControl'
-import { GoogleDriveConnection } from '../components/GoogleDriveConnection'
+import { AudioSourceChooser } from '../components/AudioSourceChooser'
 import { useTracks } from '../features/tracks/useTracks'
 import {
   BrowserGoogleDriveAuth,
@@ -49,7 +49,6 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
       </header>
 
       <main>
-        <GoogleDriveConnection auth={googleDriveAuth} />
         <section className="hero" aria-labelledby="page-title">
           <h1 id="page-title">
             Layer sounds.
@@ -57,8 +56,9 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
             Find your calm.
           </h1>
           <p className="intro">
-            Mix multiple audio tracks into a personal soundscape. Everything is
-            processed in your browser—your files never leave your device.
+            Mix multiple audio tracks into a personal soundscape. Audio is
+            processed locally in your browser. Local files are never uploaded by
+            this app.
           </p>
           <input
             ref={inputRef}
@@ -85,13 +85,10 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
               event.currentTarget.value = ''
             }}
           />
-          <button
-            className="choose-button"
-            type="button"
-            onClick={() => inputRef.current?.click()}
-          >
-            <span aria-hidden="true">＋</span> Choose files
-          </button>
+          <AudioSourceChooser
+            driveAuth={googleDriveAuth}
+            onChooseDevice={() => inputRef.current?.click()}
+          />
           <p className="file-help">
             Select multiple audio files and one optional image
           </p>
@@ -160,8 +157,8 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
 
       <footer>
         <p>
-          Your audio stays on this device and is never uploaded. Files are
-          forgotten when you close or refresh the app.
+          Audio is processed locally in your browser. Local files are never
+          uploaded by this app and are forgotten when you close or refresh it.
         </p>
       </footer>
     </div>

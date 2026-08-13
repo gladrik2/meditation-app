@@ -73,26 +73,6 @@ a:focus-visible {
 main {
   flex: 1;
 }
-.drive-connection {
-  width: min(980px, calc(100% - 40px));
-  margin: 12px auto 0;
-  padding: 14px 18px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  border: 1px solid #ddd9cd;
-  border-radius: 13px;
-  background: #fffefa;
-}
-.drive-connection p {
-  margin: 3px 0 0;
-  color: #65736b;
-  font-size: 0.82rem;
-}
-.drive-connection .drive-error {
-  color: #a13d2d;
-}
 .hero {
   width: min(760px, calc(100% - 40px));
   margin: 70px auto 72px;
@@ -127,6 +107,48 @@ h1 {
 }
 .choose-button span {
   margin-right: 5px;
+}
+.source-chooser-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: #1b282299;
+}
+.source-chooser {
+  width: min(360px, 100%);
+  display: grid;
+  gap: 10px;
+  padding: 24px;
+  border-radius: 16px;
+  background: #fffefa;
+  box-shadow: 0 20px 60px #1b282244;
+  text-align: left;
+}
+.source-chooser h2 {
+  margin: 0 0 8px;
+  font-family: Georgia, serif;
+  font-weight: 500;
+}
+.source-chooser button {
+  padding: 12px 14px;
+  border: 1px solid #d8d2c3;
+  border-radius: 9px;
+  color: #24352c;
+  background: white;
+  text-align: left;
+}
+.source-chooser .source-chooser-cancel {
+  border: 0;
+  background: transparent;
+  text-align: center;
+}
+.source-chooser-error {
+  margin: 4px 0;
+  color: #a13d2d;
+  font-size: 0.85rem;
 }
 .file-help {
   color: #79837d;

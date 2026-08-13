@@ -62,4 +62,28 @@ describe('BrowserGoogleDriveAuth', () => {
     expect(auth.getAccessToken()).toBeUndefined()
     expect(auth.isConnected()).toBe(false)
   })
+
+  it('returns an explicit empty result when the OAuth popup is closed', async () => {
+    let errorCallback: ((error: { type?: string }) => void) | undefined
+    window.google = {
+      accounts: {
+        oauth2: {
+          initTokenClient: vi.fn((options) => {
+            errorCallback = options.error_callback
+            return { requestAccessToken: vi.fn() }
+          }),
+          revoke: vi.fn(),
+          hasGrantedAllScopes: vi.fn()
+        }
+      }
+    }
+    const auth = new BrowserGoogleDriveAuth('client-id')
+    const connection = auth.connect()
+    await Promise.resolve()
+
+    errorCallback?.({ type: 'popup_closed' })
+
+    await expect(connection).resolves.toBeUndefined()
+    expect(auth.isConnected()).toBe(false)
+  })
 })
