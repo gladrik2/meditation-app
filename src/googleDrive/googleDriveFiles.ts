@@ -1,3 +1,5 @@
+import { classifyMediaFile } from '../files/classifyFile'
+
 export interface GoogleDriveDocument {
   id: string
   name: string
@@ -7,10 +9,7 @@ export interface GoogleDriveDocument {
 const DRIVE_FILES_URL = 'https://www.googleapis.com/drive/v3/files'
 
 export function isSupportedDriveDocument(document: GoogleDriveDocument) {
-  return (
-    document.mimeType.startsWith('audio/') ||
-    document.mimeType.startsWith('image/')
-  )
+  return classifyMediaFile(document.name, document.mimeType) !== 'unsupported'
 }
 
 export async function downloadGoogleDriveFiles(
