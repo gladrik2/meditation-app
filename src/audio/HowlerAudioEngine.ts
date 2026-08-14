@@ -122,6 +122,7 @@ export class HowlerAudioEngine implements AudioEngine {
             this.emit(id, 'paused')
           },
           onend: (soundId) => {
+            if (howl.loop(soundId)) return
             if (track.soundId === soundId) track.soundId = undefined
             this.emit(id, 'ended')
           },
