@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AudioEngineLoadError, type AudioEngine } from '../../audio/types'
+import { classifyMediaFile } from '../../files/classifyFile'
 
 export interface TrackViewModel {
   id: string
@@ -13,31 +14,12 @@ export interface TrackViewModel {
   error?: string
 }
 
-const AUDIO_EXTENSIONS = new Set([
-  'opus',
-  'ogg',
-  'oga',
-  'webm',
-  'mp3',
-  'm4a',
-  'aac',
-  'wav',
-  'flac'
-])
-const AMBIGUOUS_AUDIO_MIME_TYPES = new Set([
-  '',
-  'application/octet-stream',
-  'application/ogg',
-  'application/x-ogg'
-])
-
-const isAudioCandidate = (file: File) => {
-  const mimeType = file.type.toLowerCase().split(';', 1)[0].trim()
-  if (mimeType.startsWith('audio/') || AMBIGUOUS_AUDIO_MIME_TYPES.has(mimeType))
-    return true
-  const extension = file.name.toLowerCase().match(/\.([^.]+)$/)?.[1]
-  return extension !== undefined && AUDIO_EXTENSIONS.has(extension)
+export interface RestoredTrackSettings {
+  volume: number
+  isSoundEffect: boolean
+  effectChance: number
 }
+
 const SOUND_EFFECT_MAX_SECONDS = 10
 const SOUND_EFFECT_COOLDOWN_MS = 10_000
 const DEFAULT_CHANCE = 50
@@ -48,6 +30,7 @@ export function useTracks(engine: AudioEngine) {
   const counter = useRef(0)
   const tracksRef = useRef(tracks)
   const lastEffectPlay = useRef(new Map<string, number>())
+  const trackFiles = useRef(new Map<string, File>())
   const pendingDispose = useRef<{
     engine: AudioEngine
     timer: number
@@ -115,10 +98,10 @@ export function useTracks(engine: AudioEngine) {
   }, [engine])
 
   const addFiles = useCallback(
-    async (files: FileList | File[]) => {
-      for (const file of Array.from(files)) {
+    async (files: FileList | File[], restored?: RestoredTrackSettings[]) => {
+      for (const [index, file] of Array.from(files).entries()) {
         const id = `track-${counter.current++}`
-        if (!isAudioCandidate(file)) {
+        if (classifyMediaFile(file.name, file.type) !== 'audio-candidate') {
           setTracks((current) => [
             ...current,
             {
@@ -148,17 +131,23 @@ export function useTracks(engine: AudioEngine) {
             status: 'loading'
           }
         ])
+        trackFiles.current.set(id, file)
         try {
           const duration = await engine.loadTrack(id, file)
-          const isSoundEffect = duration <= SOUND_EFFECT_MAX_SECONDS
+          const saved = restored?.[index]
+          const isSoundEffect =
+            saved?.isSoundEffect ?? duration <= SOUND_EFFECT_MAX_SECONDS
           engine.setTrackLoop(id, !isSoundEffect)
+          if (saved) engine.setTrackVolume(id, saved.volume)
           setTracks((current) =>
             current.map((track) =>
               track.id === id
                 ? {
                     ...track,
                     status: 'ready',
-                    isSoundEffect
+                    isSoundEffect,
+                    volume: saved?.volume ?? track.volume,
+                    chance: saved?.effectChance ?? track.chance
                   }
                 : track
             )
@@ -212,6 +201,7 @@ export function useTracks(engine: AudioEngine) {
   const removeTrack = (id: string) => {
     engine.removeTrack(id)
     lastEffectPlay.current.delete(id)
+    trackFiles.current.delete(id)
     setTracks((current) => current.filter((track) => track.id !== id))
   }
 
@@ -267,6 +257,7 @@ export function useTracks(engine: AudioEngine) {
   return {
     tracks,
     masterVolume,
+    getTrackFile: (id: string) => trackFiles.current.get(id),
     addFiles,
     toggleTrack,
     removeTrack,

@@ -154,6 +154,24 @@ h1 {
   color: #79837d;
   font-size: 0.78rem;
 }
+.soundscape-storage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 14px;
+}
+.soundscape-storage-actions button {
+  padding: 10px 14px;
+  border: 1px solid #cfc9ba;
+  border-radius: 9px;
+  color: #24352c;
+  background: #fffefa;
+  font-weight: 650;
+}
+.soundscape-storage-actions button:hover {
+  background: #ebe5d6;
+}
 .visually-hidden {
   position: absolute;
   width: 1px;
