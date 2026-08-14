@@ -30,12 +30,21 @@ const directory = (name: string): FileSystemDirectoryHandle =>
                 chunks.push(chunk)
               },
               close: () => {
-                files.set(
-                  `${name}/${filename}`,
-                  new File(chunks as unknown as BlobPart[], filename, {
-                    type: 'audio/opus'
-                  })
+                const stored = new File(
+                  chunks as unknown as BlobPart[],
+                  filename,
+                  { type: 'audio/opus' }
                 )
+                Object.defineProperty(stored, 'stream', {
+                  value: () =>
+                    new ReadableStream({
+                      start(controller) {
+                        for (const chunk of chunks) controller.enqueue(chunk)
+                        controller.close()
+                      }
+                    })
+                })
+                files.set(`${name}/${filename}`, stored)
               }
             }) as FileSystemWritableFileStream
           }
@@ -43,9 +52,13 @@ const directory = (name: string): FileSystemDirectoryHandle =>
       }
     ),
     removeEntry: vi.fn(async (child: string) => {
-      directories.delete(child)
-      for (const key of files.keys())
-        if (key.startsWith(`${child}/`)) files.delete(key)
+      if (name === 'root') {
+        directories.delete(child)
+        for (const key of files.keys())
+          if (key.startsWith(`${child}/`)) files.delete(key)
+      } else {
+        files.delete(`${name}/${child}`)
+      }
     })
   }) as unknown as FileSystemDirectoryHandle
 
@@ -104,11 +117,14 @@ describe('LocalSoundscapeStore', () => {
     })
     const store = new LocalSoundscapeStore()
 
-    await store.save(manifest, new Map([['rain.opus', source]]))
+    await store.save(
+      structuredClone(manifest),
+      new Map([['rain.opus', source]])
+    )
     const restored = await store.restoreLast()
 
     expect(restored?.manifest.name).toBe('Offline')
-    expect(restored?.files.get('rain.opus')?.name).toBe('rain.opus')
+    expect([...restored!.files.values()][0].name).toContain('rain.opus')
 
     await store.delete(manifest.id)
     expect(await store.restoreLast()).toBeUndefined()
@@ -120,6 +136,25 @@ describe('LocalSoundscapeStore', () => {
     await expect(new LocalSoundscapeStore().requestPersistence()).resolves.toBe(
       false
     )
+  })
+
+  it('deletes obsolete OPFS files when overwriting a soundscape', async () => {
+    const store = new LocalSoundscapeStore()
+    const source = new File(['audio'], 'rain.opus')
+    Object.defineProperty(source, 'stream', {
+      value: () =>
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('audio'))
+            controller.close()
+          }
+        })
+    })
+    const overwritten = structuredClone(manifest)
+    await store.save(overwritten, new Map([['rain.opus', source]]))
+    const oldPath = overwritten.tracks[0].reference.localPath
+    await store.commitManifest({ ...overwritten, tracks: [] })
+    expect(files.has(`${manifest.id}/${oldPath}`)).toBe(false)
   })
 
   it('does not publish metadata after an interrupted OPFS transfer', async () => {
@@ -135,7 +170,7 @@ describe('LocalSoundscapeStore', () => {
     const store = new LocalSoundscapeStore()
 
     await expect(
-      store.save(manifest, new Map([['rain.opus', broken]]))
+      store.save(structuredClone(manifest), new Map([['rain.opus', broken]]))
     ).rejects.toThrow('interrupted')
     expect(await store.restoreLast()).toBeUndefined()
   })

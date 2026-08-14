@@ -75,6 +75,7 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
     )
     if (trackFiles.some((file) => !file))
       throw new Error('A saved soundscape file is missing from local storage.')
+    controls.clearTracks()
     await controls.addFiles(
       trackFiles as File[],
       manifest.tracks.map((track) => ({
@@ -236,8 +237,8 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
           </h1>
           <p className="intro">
             Mix multiple audio tracks into a personal soundscape. Audio is
-            processed locally in your browser. Local files are never uploaded by
-            this app.
+            processed locally in your browser unless you explicitly save a
+            soundscape to your Google Drive.
           </p>
           <input
             ref={inputRef}
@@ -255,7 +256,6 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
           <AudioSourceChooser
             driveAuth={googleDriveAuth}
             onChooseDevice={() => inputRef.current?.click()}
-            onChooseDriveFiles={addSelectedFiles}
             onOpenDriveSoundscape={async (fileId, token) => {
               setSaveMessage('Downloading soundscape from Google Drive…')
               try {
@@ -354,8 +354,8 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
 
       <footer>
         <p>
-          Audio is processed locally in your browser. Local files are never
-          uploaded by this app and are forgotten when you close or refresh it.
+          Unsaved files are forgotten when you close or refresh the app. Saved
+          soundscapes remain in private browser storage until you delete them.
         </p>
       </footer>
     </div>

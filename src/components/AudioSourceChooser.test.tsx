@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { GoogleDriveAuth } from '../googleDrive/googleDriveAuth'
 import { AudioSourceChooser } from './AudioSourceChooser'
 
@@ -10,13 +10,11 @@ vi.mock('@googleworkspace/drive-picker-react', () => ({
       <button
         onClick={() =>
           (onPicked as (event: object) => void)({
-            detail: {
-              docs: [{ id: 'rain-id', name: 'rain.wav', mimeType: 'audio/wav' }]
-            }
+            detail: { docs: [{ id: 'manifest-id', name: 'soundscape.json' }] }
           })
         }
       >
-        Pick Drive files
+        Pick manifest
       </button>
       <button onClick={() => (onCanceled as () => void)()}>
         Cancel Picker
@@ -26,179 +24,115 @@ vi.mock('@googleworkspace/drive-picker-react', () => ({
   DrivePickerDocsView: () => null
 }))
 
-function createAuth(overrides: Partial<GoogleDriveAuth> = {}): GoogleDriveAuth {
-  return {
-    connect: vi.fn().mockResolvedValue('access-token'),
-    disconnect: vi.fn().mockResolvedValue(undefined),
-    getAccessToken: vi.fn().mockReturnValue(undefined),
-    isConnected: vi.fn().mockReturnValue(false),
-    ...overrides
-  }
-}
+const auth = (overrides: Partial<GoogleDriveAuth> = {}): GoogleDriveAuth => ({
+  connect: vi.fn().mockResolvedValue('new-token'),
+  disconnect: vi.fn(),
+  getAccessToken: vi.fn().mockReturnValue(undefined),
+  isConnected: vi.fn().mockReturnValue(false),
+  ...overrides
+})
 
 describe('AudioSourceChooser', () => {
-  const props = { onChooseDevice: vi.fn(), onChooseDriveFiles: vi.fn() }
-
-  afterEach(() => vi.restoreAllMocks())
-
-  it('opens the local file input flow from the source menu', async () => {
+  it('keeps the local file flow unchanged', async () => {
     const user = userEvent.setup()
     const onChooseDevice = vi.fn()
     render(
       <AudioSourceChooser
         onChooseDevice={onChooseDevice}
-        onChooseDriveFiles={vi.fn()}
+        onOpenDriveSoundscape={vi.fn()}
       />
     )
-
     await user.click(screen.getByRole('button', { name: 'Add files' }))
     await user.click(screen.getByRole('button', { name: 'From this device' }))
-
     expect(onChooseDevice).toHaveBeenCalledOnce()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('reuses a valid Drive token without reconnecting', async () => {
+  it('offers only saved-soundscape Drive import and reuses its token', async () => {
     const user = userEvent.setup()
-    const auth = createAuth({
-      getAccessToken: vi.fn().mockReturnValue('valid')
+    const driveAuth = auth({
+      getAccessToken: vi.fn().mockReturnValue('cached')
     })
-    render(<AudioSourceChooser driveAuth={auth} {...props} />)
-
+    render(
+      <AudioSourceChooser
+        driveAuth={driveAuth}
+        onChooseDevice={vi.fn()}
+        onOpenDriveSoundscape={vi.fn()}
+      />
+    )
     await user.click(screen.getByRole('button', { name: 'Add files' }))
-    await user.click(screen.getByRole('button', { name: 'From Google Drive' }))
-
-    expect(auth.connect).not.toHaveBeenCalled()
+    expect(
+      screen.queryByRole('button', { name: 'From Google Drive' })
+    ).not.toBeInTheDocument()
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Open saved soundscape from Google Drive'
+      })
+    )
+    expect(driveAuth.connect).not.toHaveBeenCalled()
     expect(screen.getByTestId('drive-picker')).toBeInTheDocument()
   })
 
-  it('silently closes after OAuth cancellation', async () => {
+  it('passes the one selected manifest and token to the import flow', async () => {
     const user = userEvent.setup()
-    const auth = createAuth({ connect: vi.fn().mockResolvedValue(undefined) })
-    render(<AudioSourceChooser driveAuth={auth} {...props} />)
-
-    await user.click(screen.getByRole('button', { name: 'Add files' }))
-    await user.click(screen.getByRole('button', { name: 'From Google Drive' }))
-
-    expect(screen.queryByText(/authorization was cancelled/i)).toBeNull()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  })
-
-  it('shows real authorization failures', async () => {
-    const user = userEvent.setup()
-    const auth = createAuth({
-      connect: vi.fn().mockRejectedValue(new Error('Google sign-in failed.'))
-    })
-    render(<AudioSourceChooser driveAuth={auth} {...props} />)
-
-    await user.click(screen.getByRole('button', { name: 'Add files' }))
-    await user.click(screen.getByRole('button', { name: 'From Google Drive' }))
-
-    expect(screen.getByText('Google sign-in failed.')).toBeInTheDocument()
-  })
-
-  it('downloads a picked file and sends it to the existing file pipeline', async () => {
-    const user = userEvent.setup()
-    const onChooseDriveFiles = vi.fn()
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: true,
-      blob: vi.fn().mockResolvedValue(new Blob(['audio']))
-    } as unknown as Response)
+    const open = vi.fn()
     render(
       <AudioSourceChooser
-        driveAuth={createAuth({
-          getAccessToken: vi.fn().mockReturnValue('reused-token')
-        })}
+        driveAuth={auth({ getAccessToken: vi.fn().mockReturnValue('token') })}
         onChooseDevice={vi.fn()}
-        onChooseDriveFiles={onChooseDriveFiles}
+        onOpenDriveSoundscape={open}
       />
     )
-
     await user.click(screen.getByRole('button', { name: 'Add files' }))
-    await user.click(screen.getByRole('button', { name: 'From Google Drive' }))
-    await user.click(screen.getByRole('button', { name: 'Pick Drive files' }))
-
-    expect(onChooseDriveFiles).toHaveBeenCalledWith([
-      expect.objectContaining({ name: 'rain.wav', type: 'audio/wav' })
-    ])
-    expect(fetch).toHaveBeenCalledWith(
-      'https://www.googleapis.com/drive/v3/files/rain-id?alt=media',
-      { headers: { Authorization: 'Bearer reused-token' } }
+    await user.click(
+      screen.getByRole('button', { name: /Open saved soundscape/ })
     )
+    await user.click(screen.getByRole('button', { name: 'Pick manifest' }))
+    expect(open).toHaveBeenCalledWith('manifest-id', 'token')
   })
 
-  it('disables the source chooser while picked files are downloading', async () => {
+  it('closes silently when OAuth or Picker is canceled', async () => {
     const user = userEvent.setup()
-    let finishDownload: ((response: Response) => void) | undefined
-    vi.spyOn(globalThis, 'fetch').mockReturnValue(
-      new Promise((resolve) => {
-        finishDownload = resolve
-      })
-    )
-    render(
+    const { rerender } = render(
       <AudioSourceChooser
-        driveAuth={createAuth({
-          getAccessToken: vi.fn().mockReturnValue('token')
-        })}
-        {...props}
-      />
-    )
-
-    await user.click(screen.getByRole('button', { name: 'Add files' }))
-    await user.click(screen.getByRole('button', { name: 'From Google Drive' }))
-    await user.click(screen.getByRole('button', { name: 'Pick Drive files' }))
-
-    expect(
-      screen.getByRole('button', { name: 'From this device' })
-    ).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Downloading…' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
-    expect(screen.queryByTestId('drive-picker')).not.toBeInTheDocument()
-
-    finishDownload?.({
-      ok: true,
-      blob: vi.fn().mockResolvedValue(new Blob(['audio']))
-    } as unknown as Response)
-  })
-
-  it('closes silently when the Picker is canceled', async () => {
-    const user = userEvent.setup()
-    render(
-      <AudioSourceChooser
-        driveAuth={createAuth({
-          getAccessToken: vi.fn().mockReturnValue('token')
-        })}
-        {...props}
+        driveAuth={auth({ connect: vi.fn().mockResolvedValue(undefined) })}
+        onChooseDevice={vi.fn()}
+        onOpenDriveSoundscape={vi.fn()}
       />
     )
     await user.click(screen.getByRole('button', { name: 'Add files' }))
-    await user.click(screen.getByRole('button', { name: 'From Google Drive' }))
-    await user.click(screen.getByRole('button', { name: 'Cancel Picker' }))
-
+    await user.click(screen.getByRole('button', { name: /Open saved/ }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.queryByText(/error|failed/i)).not.toBeInTheDocument()
-  })
 
-  it('surfaces a Drive download failure', async () => {
-    const user = userEvent.setup()
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: false,
-      status: 403
-    } as unknown as Response)
-    render(
+    rerender(
       <AudioSourceChooser
-        driveAuth={createAuth({
-          getAccessToken: vi.fn().mockReturnValue('token')
-        })}
-        {...props}
+        driveAuth={auth({ getAccessToken: vi.fn().mockReturnValue('token') })}
+        onChooseDevice={vi.fn()}
+        onOpenDriveSoundscape={vi.fn()}
       />
     )
     await user.click(screen.getByRole('button', { name: 'Add files' }))
-    await user.click(screen.getByRole('button', { name: 'From Google Drive' }))
-    await user.click(screen.getByRole('button', { name: 'Pick Drive files' }))
+    await user.click(screen.getByRole('button', { name: /Open saved/ }))
+    await user.click(screen.getByRole('button', { name: 'Cancel Picker' }))
+    expect(screen.queryByText(/failed|error/i)).not.toBeInTheDocument()
+  })
 
+  it('surfaces import failures and unlocks the chooser', async () => {
+    const user = userEvent.setup()
+    render(
+      <AudioSourceChooser
+        driveAuth={auth({ getAccessToken: vi.fn().mockReturnValue('token') })}
+        onChooseDevice={vi.fn()}
+        onOpenDriveSoundscape={vi
+          .fn()
+          .mockRejectedValue(new Error('Drive transfer was interrupted.'))}
+      />
+    )
+    await user.click(screen.getByRole('button', { name: 'Add files' }))
+    await user.click(screen.getByRole('button', { name: /Open saved/ }))
+    await user.click(screen.getByRole('button', { name: 'Pick manifest' }))
     expect(
-      await screen.findByText(/Could not download “rain.wav”.*403/)
+      await screen.findByText('Drive transfer was interrupted.')
     ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Open saved/ })).toBeEnabled()
   })
 })

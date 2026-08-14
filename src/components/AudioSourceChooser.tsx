@@ -4,17 +4,12 @@ import {
   DrivePickerDocsView
 } from '@googleworkspace/drive-picker-react'
 import type { GoogleDriveAuth } from '../googleDrive/googleDriveAuth'
-import {
-  downloadGoogleDriveFiles,
-  type GoogleDriveDocument
-} from '../googleDrive/googleDriveFiles'
 
 const GOOGLE_DRIVE_APP_ID = '628795874681'
 
 interface AudioSourceChooserProps {
   driveAuth?: GoogleDriveAuth
   onChooseDevice(): void
-  onChooseDriveFiles(files: File[]): void | Promise<void>
   onOpenDriveSoundscape?(
     fileId: string,
     accessToken: string
@@ -24,7 +19,6 @@ interface AudioSourceChooserProps {
 export function AudioSourceChooser({
   driveAuth,
   onChooseDevice,
-  onChooseDriveFiles,
   onOpenDriveSoundscape
 }: AudioSourceChooserProps) {
   const [open, setOpen] = useState(false)
@@ -32,9 +26,6 @@ export function AudioSourceChooser({
   const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState<string>()
   const [pickerToken, setPickerToken] = useState<string>()
-  const [pickerPurpose, setPickerPurpose] = useState<'media' | 'manifest'>(
-    'media'
-  )
 
   const close = () => {
     if (busy) return
@@ -43,7 +34,7 @@ export function AudioSourceChooser({
     setDownloading(false)
   }
 
-  const chooseDrive = async (purpose: 'media' | 'manifest' = 'media') => {
+  const chooseDrive = async () => {
     if (!driveAuth) {
       setError('Google Drive is not configured for this app.')
       return
@@ -57,7 +48,6 @@ export function AudioSourceChooser({
         setOpen(false)
         return
       }
-      setPickerPurpose(purpose)
       setPickerToken(token)
     } catch (caught) {
       setError(
@@ -119,24 +109,17 @@ export function AudioSourceChooser({
             >
               From this device
             </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void chooseDrive()}
-            >
-              {downloading
-                ? 'Downloading…'
-                : busy
-                  ? 'Connecting…'
-                  : 'From Google Drive'}
-            </button>
             {onOpenDriveSoundscape && (
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => void chooseDrive('manifest')}
+                onClick={() => void chooseDrive()}
               >
-                Open saved soundscape from Google Drive
+                {downloading
+                  ? 'Downloading soundscape…'
+                  : busy
+                    ? 'Connecting…'
+                    : 'Open saved soundscape from Google Drive'}
               </button>
             )}
             {error && <p className="source-chooser-error">{error}</p>}
@@ -155,24 +138,20 @@ export function AudioSourceChooser({
         <DrivePicker
           app-id={GOOGLE_DRIVE_APP_ID}
           oauth-token={pickerToken}
-          multiselect={pickerPurpose === 'media'}
+          multiselect={false}
           onCanceled={() => {
             setPickerToken(undefined)
             setOpen(false)
             setBusy(false)
           }}
           onPicked={(event) => {
-            const documents = (event.detail.docs ?? []) as GoogleDriveDocument[]
+            const documents = (event.detail.docs ?? []) as { id: string }[]
             setPickerToken(undefined)
             setBusy(true)
             setDownloading(true)
-            const operation =
-              pickerPurpose === 'manifest'
-                ? onOpenDriveSoundscape?.(documents[0]?.id ?? '', pickerToken)
-                : downloadGoogleDriveFiles(documents, pickerToken).then(
-                    onChooseDriveFiles
-                  )
-            void Promise.resolve(operation)
+            void Promise.resolve(
+              onOpenDriveSoundscape?.(documents[0]?.id ?? '', pickerToken)
+            )
               .then(() => {
                 setPickerToken(undefined)
                 setOpen(false)
@@ -186,9 +165,7 @@ export function AudioSourceChooser({
           <DrivePickerDocsView
             include-folders="false"
             select-folder-enabled="false"
-            mime-types={
-              pickerPurpose === 'manifest' ? 'application/json' : undefined
-            }
+            mime-types="application/json"
           />
         </DrivePicker>
       )}

@@ -16,11 +16,14 @@ async function upload(
   token: string,
   fetcher: typeof fetch
 ) {
-  const start = await fetcher(`${UPLOAD}?uploadType=resumable`, {
-    method: 'POST',
-    headers: { ...headers(token), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, mimeType, parents: [parentId] })
-  })
+  const start = await fetcher(
+    `${UPLOAD}?uploadType=resumable&fields=id,modifiedTime,size,md5Checksum`,
+    {
+      method: 'POST',
+      headers: { ...headers(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, mimeType, parents: [parentId] })
+    }
+  )
   if (!start.ok) throw new Error(`Could not start uploading “${name}”.`)
   const location = start.headers.get('Location')
   if (!location) throw new Error('Google Drive did not provide an upload URL.')
@@ -30,7 +33,7 @@ async function upload(
     body
   })
   if (!result.ok) throw new Error(`Could not upload “${name}”.`)
-  return (await result.json()) as { id: string }
+  return (await result.json()) as DriveMetadata
 }
 
 export async function publishSoundscape(
@@ -65,6 +68,9 @@ export async function publishSoundscape(
       fetcher
     )
     item.reference.driveFileId = uploaded.id
+    item.reference.driveModifiedTime = uploaded.modifiedTime
+    item.reference.driveSize = uploaded.size
+    item.reference.driveChecksum = uploaded.md5Checksum
   }
   await upload(
     'soundscape.json',
@@ -118,11 +124,19 @@ export async function importDriveSoundscape(
     throw new Error('Could not download soundscape.json.')
   const manifest = parseSoundscapeManifest(await manifestResponse.json())
   const cached = await store.restore(manifest.id).catch(() => undefined)
+  const cachedByDriveId = new Map(
+    [
+      ...(cached?.manifest.image ? [cached.manifest.image] : []),
+      ...(cached?.manifest.tracks ?? [])
+    ]
+      .filter((item) => item.reference.driveFileId)
+      .map((item) => [item.reference.driveFileId, item] as const)
+  )
   const media = [
     ...(manifest.image ? [manifest.image] : []),
     ...manifest.tracks
   ]
-  const downloaded = await mapWithConcurrency(media, 3, async (item) => {
+  await mapWithConcurrency(media, 3, async (item) => {
     const id = item.reference.driveFileId
     if (!id) throw new Error(`“${item.name}” has no Google Drive file ID.`)
     const metadataResponse = await fetcher(
@@ -133,17 +147,22 @@ export async function importDriveSoundscape(
       throw new Error(`Could not check “${item.name}” on Google Drive.`)
     const metadata = (await metadataResponse.json()) as DriveMetadata
     const reference = item.reference
+    const cachedItem = cachedByDriveId.get(id)
+    const cachedReference = cachedItem?.reference
     const unchanged =
-      cached?.files.has(reference.localPath) &&
-      reference.driveModifiedTime === metadata.modifiedTime &&
-      reference.driveSize === metadata.size &&
-      (!reference.driveChecksum ||
-        reference.driveChecksum === metadata.md5Checksum)
-    if (unchanged)
-      return [
-        reference.localPath,
-        cached!.files.get(reference.localPath)!
-      ] as const
+      cachedReference &&
+      cached?.files.has(cachedReference.localPath) &&
+      cachedReference.driveModifiedTime === metadata.modifiedTime &&
+      cachedReference.driveSize === metadata.size &&
+      (!cachedReference.driveChecksum ||
+        cachedReference.driveChecksum === metadata.md5Checksum)
+    reference.driveModifiedTime = metadata.modifiedTime
+    reference.driveSize = metadata.size
+    reference.driveChecksum = metadata.md5Checksum
+    if (unchanged) {
+      reference.localPath = cachedReference.localPath
+      return
+    }
     const response = await fetcher(
       `${API}/${encodeURIComponent(id)}?alt=media`,
       {
@@ -151,15 +170,17 @@ export async function importDriveSoundscape(
       }
     )
     if (!response.ok) throw new Error(`Could not download “${item.name}”.`)
-    reference.driveModifiedTime = metadata.modifiedTime
-    reference.driveSize = metadata.size
-    reference.driveChecksum = metadata.md5Checksum
-    return [
+    if (!response.body)
+      throw new Error(`Google Drive returned no data for “${item.name}”.`)
+    reference.localPath = await store.writeMedia(
+      manifest.id,
       reference.localPath,
-      new File([await response.blob()], item.name, { type: item.mimeType })
-    ] as const
+      response.body
+    )
   })
-  const files = new Map<string, File>(downloaded)
-  await store.save(manifest, files)
-  return { manifest, files }
+  await store.commitManifest(manifest)
+  const restored = await store.restore(manifest.id)
+  if (!restored)
+    throw new Error('The imported soundscape cache is unavailable.')
+  return restored
 }

@@ -47,19 +47,63 @@ export class LocalSoundscapeStore {
   }
 
   async save(manifest: SoundscapeManifest, files: Map<string, File>) {
-    const root = await this.root()
-    const directory = await root.getDirectoryHandle(manifest.id, {
-      create: true
-    })
     for (const media of mediaFiles(manifest)) {
-      const file = files.get(media.reference.localPath)
+      const requestedPath = media.reference.localPath
+      const file = files.get(requestedPath)
       if (!file)
         throw new Error(`The media file “${media.name}” is unavailable.`)
-      const handle = await directory.getFileHandle(media.reference.localPath, {
+      media.reference.localPath = await this.writeMedia(
+        manifest.id,
+        requestedPath,
+        file.stream()
+      )
+    }
+    await this.commitManifest(manifest)
+  }
+
+  async writeMedia(
+    soundscapeId: string,
+    localPath: string,
+    stream: ReadableStream<Uint8Array>
+  ) {
+    const directory = await (
+      await this.root()
+    ).getDirectoryHandle(soundscapeId, {
+      create: true
+    })
+    const temporaryPath = `${localPath}.${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2)}.media`
+    try {
+      const temporary = await directory.getFileHandle(temporaryPath, {
         create: true
       })
-      const writable = await handle.createWritable()
-      await file.stream().pipeTo(writable)
+      await stream.pipeTo(await temporary.createWritable())
+      return temporaryPath
+    } catch (error) {
+      await directory.removeEntry(temporaryPath).catch(() => undefined)
+      throw error
+    }
+  }
+
+  async commitManifest(manifest: SoundscapeManifest) {
+    const previous = await transaction<StoredManifest | undefined>(
+      'readonly',
+      (store) => store.get(manifest.id)
+    )
+    const currentPaths = new Set(
+      mediaFiles(manifest).map((media) => media.reference.localPath)
+    )
+    if (previous) {
+      const directory = await (
+        await this.root()
+      ).getDirectoryHandle(manifest.id)
+      for (const oldMedia of mediaFiles(previous.manifest)) {
+        if (!currentPaths.has(oldMedia.reference.localPath))
+          await directory
+            .removeEntry(oldMedia.reference.localPath)
+            .catch(() => undefined)
+      }
     }
     await transaction('readwrite', (store) =>
       store.put({ id: manifest.id, manifest } satisfies StoredManifest)

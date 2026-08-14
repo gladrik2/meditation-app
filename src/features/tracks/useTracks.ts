@@ -205,6 +205,14 @@ export function useTracks(engine: AudioEngine) {
     setTracks((current) => current.filter((track) => track.id !== id))
   }
 
+  const clearTracks = () => {
+    engine.stopAll()
+    for (const track of tracksRef.current) engine.removeTrack(track.id)
+    trackFiles.current.clear()
+    lastEffectPlay.current.clear()
+    setTracks([])
+  }
+
   const setEffectChance = (id: string, chance: number) => {
     const normalizedChance = Math.max(1, Math.floor(chance) || 1)
     setTracks((current) =>
@@ -258,6 +266,7 @@ export function useTracks(engine: AudioEngine) {
     tracks,
     masterVolume,
     getTrackFile: (id: string) => trackFiles.current.get(id),
+    clearTracks,
     addFiles,
     toggleTrack,
     removeTrack,
