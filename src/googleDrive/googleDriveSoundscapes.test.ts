@@ -139,6 +139,49 @@ describe('Google Drive soundscapes', () => {
     expect(store.commitManifest).toHaveBeenCalledOnce()
   })
 
+  it('removes all staged Drive files when a later transfer fails', async () => {
+    const incoming = manifest()
+    incoming.tracks.push({
+      ...incoming.tracks[0],
+      name: 'birds.opus',
+      reference: { localPath: 'birds.opus', driveFileId: 'birds-id' }
+    })
+    const store = {
+      restore: vi.fn().mockResolvedValue(undefined),
+      writeMedia: vi
+        .fn()
+        .mockResolvedValueOnce('rain-staged.media')
+        .mockRejectedValueOnce(new Error('birds transfer failed')),
+      removeMedia: vi.fn(),
+      commitManifest: vi.fn()
+    } as unknown as LocalSoundscapeStore
+    const streamResponse = {
+      ok: true,
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1]))
+          controller.close()
+        }
+      })
+    } as unknown as Response
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(response(incoming))
+      .mockResolvedValueOnce(response({ id: 'media-id', size: '4' }))
+      .mockResolvedValueOnce(response({ id: 'birds-id', size: '5' }))
+      .mockResolvedValueOnce(streamResponse)
+      .mockResolvedValueOnce(streamResponse)
+
+    await expect(
+      importDriveSoundscape('manifest-id', 'token', store, fetcher)
+    ).rejects.toThrow('birds transfer failed')
+
+    expect(store.removeMedia).toHaveBeenCalledWith('landscape', [
+      'rain-staged.media'
+    ])
+    expect(store.commitManifest).not.toHaveBeenCalled()
+  })
+
   it('limits parallel transfers', async () => {
     let active = 0
     let peak = 0

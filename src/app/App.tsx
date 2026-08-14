@@ -111,8 +111,8 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localStore])
 
-  const buildManifest = (name: string) => {
-    const id = savedId ?? crypto.randomUUID()
+  const buildManifest = (name: string, requestedId?: string) => {
+    const id = requestedId ?? savedId ?? crypto.randomUUID()
     const files = new Map<string, File>()
     const uniquePath = (prefix: string, index: number, file: File) =>
       `${prefix}-${index}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
@@ -205,7 +205,9 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
         setSaveMessage(undefined)
         return
       }
-      const { manifest, files } = buildManifest(name)
+      // Publishing creates a new Drive package, so it also receives a new
+      // manifest/cache identity rather than colliding with an earlier folder.
+      const { manifest, files } = buildManifest(name, crypto.randomUUID())
       await publishSoundscape(manifest, files, token)
       await localStore.save(manifest, files)
       setSavedId(manifest.id)

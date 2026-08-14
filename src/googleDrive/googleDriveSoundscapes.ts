@@ -90,14 +90,20 @@ export async function mapWithConcurrency<T, R>(
 ) {
   const results = new Array<R>(values.length)
   let next = 0
+  let failure: unknown
   await Promise.all(
     Array.from({ length: Math.min(limit, values.length) }, async () => {
-      while (next < values.length) {
+      while (next < values.length && failure === undefined) {
         const index = next++
-        results[index] = await task(values[index])
+        try {
+          results[index] = await task(values[index])
+        } catch (error) {
+          failure = error
+        }
       }
     })
   )
+  if (failure !== undefined) throw failure
   return results
 }
 
@@ -136,49 +142,56 @@ export async function importDriveSoundscape(
     ...(manifest.image ? [manifest.image] : []),
     ...manifest.tracks
   ]
-  await mapWithConcurrency(media, 3, async (item) => {
-    const id = item.reference.driveFileId
-    if (!id) throw new Error(`“${item.name}” has no Google Drive file ID.`)
-    const metadataResponse = await fetcher(
-      `${API}/${encodeURIComponent(id)}?fields=id,name,mimeType,size,modifiedTime,md5Checksum`,
-      { headers: headers(token) }
-    )
-    if (!metadataResponse.ok)
-      throw new Error(`Could not check “${item.name}” on Google Drive.`)
-    const metadata = (await metadataResponse.json()) as DriveMetadata
-    const reference = item.reference
-    const cachedItem = cachedByDriveId.get(id)
-    const cachedReference = cachedItem?.reference
-    const unchanged =
-      cachedReference &&
-      cached?.files.has(cachedReference.localPath) &&
-      cachedReference.driveModifiedTime === metadata.modifiedTime &&
-      cachedReference.driveSize === metadata.size &&
-      (!cachedReference.driveChecksum ||
-        cachedReference.driveChecksum === metadata.md5Checksum)
-    reference.driveModifiedTime = metadata.modifiedTime
-    reference.driveSize = metadata.size
-    reference.driveChecksum = metadata.md5Checksum
-    if (unchanged) {
-      reference.localPath = cachedReference.localPath
-      return
-    }
-    const response = await fetcher(
-      `${API}/${encodeURIComponent(id)}?alt=media`,
-      {
-        headers: headers(token)
+  const stagedPaths: string[] = []
+  try {
+    await mapWithConcurrency(media, 3, async (item) => {
+      const id = item.reference.driveFileId
+      if (!id) throw new Error(`“${item.name}” has no Google Drive file ID.`)
+      const metadataResponse = await fetcher(
+        `${API}/${encodeURIComponent(id)}?fields=id,name,mimeType,size,modifiedTime,md5Checksum`,
+        { headers: headers(token) }
+      )
+      if (!metadataResponse.ok)
+        throw new Error(`Could not check “${item.name}” on Google Drive.`)
+      const metadata = (await metadataResponse.json()) as DriveMetadata
+      const reference = item.reference
+      const cachedItem = cachedByDriveId.get(id)
+      const cachedReference = cachedItem?.reference
+      const unchanged =
+        cachedReference &&
+        cached?.files.has(cachedReference.localPath) &&
+        cachedReference.driveModifiedTime === metadata.modifiedTime &&
+        cachedReference.driveSize === metadata.size &&
+        (!cachedReference.driveChecksum ||
+          cachedReference.driveChecksum === metadata.md5Checksum)
+      reference.driveModifiedTime = metadata.modifiedTime
+      reference.driveSize = metadata.size
+      reference.driveChecksum = metadata.md5Checksum
+      if (unchanged) {
+        reference.localPath = cachedReference.localPath
+        return
       }
-    )
-    if (!response.ok) throw new Error(`Could not download “${item.name}”.`)
-    if (!response.body)
-      throw new Error(`Google Drive returned no data for “${item.name}”.`)
-    reference.localPath = await store.writeMedia(
-      manifest.id,
-      reference.localPath,
-      response.body
-    )
-  })
-  await store.commitManifest(manifest)
+      const response = await fetcher(
+        `${API}/${encodeURIComponent(id)}?alt=media`,
+        {
+          headers: headers(token)
+        }
+      )
+      if (!response.ok) throw new Error(`Could not download “${item.name}”.`)
+      if (!response.body)
+        throw new Error(`Google Drive returned no data for “${item.name}”.`)
+      reference.localPath = await store.writeMedia(
+        manifest.id,
+        reference.localPath,
+        response.body
+      )
+      stagedPaths.push(reference.localPath)
+    })
+    await store.commitManifest(manifest)
+  } catch (error) {
+    await store.removeMedia(manifest.id, stagedPaths)
+    throw error
+  }
   const restored = await store.restore(manifest.id)
   if (!restored)
     throw new Error('The imported soundscape cache is unavailable.')

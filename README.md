@@ -69,6 +69,7 @@ After merging to `main`, a repository administrator must open **Settings → Pag
 - Tracks are held in memory, so very large or numerous files may exceed mobile memory limits.
 - Pause positions are tracked by the audio clock; tracks that naturally reach their end reset to the beginning.
 - File access is intentionally not persisted between sessions.
+- Google Drive uploads restart from the beginning if interrupted; chunked upload resumption is not implemented yet.
 - The first playback gesture may be needed to resume audio due to browser autoplay policies.
 - Advanced mixing, waveform rendering, effects, panning, looping, and persistent libraries are not yet implemented.
 

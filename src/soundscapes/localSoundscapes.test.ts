@@ -157,6 +157,34 @@ describe('LocalSoundscapeStore', () => {
     expect(files.has(`${manifest.id}/${oldPath}`)).toBe(false)
   })
 
+  it('keeps previous media when the replacement manifest commit fails', async () => {
+    const store = new LocalSoundscapeStore()
+    const source = new File(['audio'], 'rain.opus')
+    Object.defineProperty(source, 'stream', {
+      value: () =>
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array([1]))
+            controller.close()
+          }
+        })
+    })
+    const saved = structuredClone(manifest)
+    await store.save(saved, new Map([['rain.opus', source]]))
+    const oldPath = saved.tracks[0].reference.localPath
+    const put = vi
+      .spyOn(IDBObjectStore.prototype, 'put')
+      .mockImplementationOnce(() => {
+        throw new Error('IndexedDB commit failed')
+      })
+
+    await expect(
+      store.commitManifest({ ...saved, tracks: [] })
+    ).rejects.toThrow('IndexedDB commit failed')
+    put.mockRestore()
+    expect(files.has(`${manifest.id}/${oldPath}`)).toBe(true)
+  })
+
   it('does not publish metadata after an interrupted OPFS transfer', async () => {
     const broken = new File(['audio'], 'rain.opus')
     Object.defineProperty(broken, 'stream', {
@@ -173,5 +201,48 @@ describe('LocalSoundscapeStore', () => {
       store.save(structuredClone(manifest), new Map([['rain.opus', broken]]))
     ).rejects.toThrow('interrupted')
     expect(await store.restoreLast()).toBeUndefined()
+  })
+
+  it('removes every staged file when a later media transfer fails', async () => {
+    const first = new File(['first'], 'first.opus')
+    Object.defineProperty(first, 'stream', {
+      value: () =>
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('first'))
+            controller.close()
+          }
+        })
+    })
+    const second = new File(['second'], 'second.opus')
+    Object.defineProperty(second, 'stream', {
+      value: () =>
+        new ReadableStream({
+          start(controller) {
+            controller.error(new Error('second transfer failed'))
+          }
+        })
+    })
+    const multiFileManifest = structuredClone(manifest)
+    multiFileManifest.tracks.push({
+      ...multiFileManifest.tracks[0],
+      name: 'second.opus',
+      reference: { localPath: 'second.opus' }
+    })
+
+    await expect(
+      new LocalSoundscapeStore().save(
+        multiFileManifest,
+        new Map([
+          ['rain.opus', first],
+          ['second.opus', second]
+        ])
+      )
+    ).rejects.toThrow('second transfer failed')
+
+    expect(
+      [...files.keys()].filter((path) => path.startsWith(`${manifest.id}/`))
+    ).toEqual([])
+    expect(await new LocalSoundscapeStore().restoreLast()).toBeUndefined()
   })
 })

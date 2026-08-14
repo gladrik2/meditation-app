@@ -24,9 +24,15 @@ const transaction = async <T>(
 ) => {
   const database = await openDatabase()
   return new Promise<T>((resolve, reject) => {
-    const request = run(database.transaction(STORE, mode).objectStore(STORE))
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error)
+    const idbTransaction = database.transaction(STORE, mode)
+    const request = run(idbTransaction.objectStore(STORE))
+    let result: T
+    request.onsuccess = () => {
+      result = request.result
+    }
+    idbTransaction.oncomplete = () => resolve(result)
+    idbTransaction.onerror = () => reject(idbTransaction.error ?? request.error)
+    idbTransaction.onabort = () => reject(idbTransaction.error ?? request.error)
   }).finally(() => database.close())
 }
 
@@ -47,18 +53,25 @@ export class LocalSoundscapeStore {
   }
 
   async save(manifest: SoundscapeManifest, files: Map<string, File>) {
-    for (const media of mediaFiles(manifest)) {
-      const requestedPath = media.reference.localPath
-      const file = files.get(requestedPath)
-      if (!file)
-        throw new Error(`The media file “${media.name}” is unavailable.`)
-      media.reference.localPath = await this.writeMedia(
-        manifest.id,
-        requestedPath,
-        file.stream()
-      )
+    const stagedPaths: string[] = []
+    try {
+      for (const media of mediaFiles(manifest)) {
+        const requestedPath = media.reference.localPath
+        const file = files.get(requestedPath)
+        if (!file)
+          throw new Error(`The media file “${media.name}” is unavailable.`)
+        media.reference.localPath = await this.writeMedia(
+          manifest.id,
+          requestedPath,
+          file.stream()
+        )
+        stagedPaths.push(media.reference.localPath)
+      }
+      await this.commitManifest(manifest)
+    } catch (error) {
+      await this.removeMedia(manifest.id, stagedPaths)
+      throw error
     }
-    await this.commitManifest(manifest)
   }
 
   async writeMedia(
@@ -94,10 +107,20 @@ export class LocalSoundscapeStore {
     const currentPaths = new Set(
       mediaFiles(manifest).map((media) => media.reference.localPath)
     )
+    await transaction('readwrite', (store) =>
+      store.put({ id: manifest.id, manifest } satisfies StoredManifest)
+    )
+    try {
+      localStorage.setItem(LAST_KEY, manifest.id)
+    } catch {
+      // The manifest itself is committed; failure to update the convenience
+      // pointer must not roll back or delete its media.
+    }
     if (previous) {
-      const directory = await (
-        await this.root()
-      ).getDirectoryHandle(manifest.id)
+      const directory = await this.root()
+        .then((root) => root.getDirectoryHandle(manifest.id))
+        .catch(() => undefined)
+      if (!directory) return
       for (const oldMedia of mediaFiles(previous.manifest)) {
         if (!currentPaths.has(oldMedia.reference.localPath))
           await directory
@@ -105,10 +128,19 @@ export class LocalSoundscapeStore {
             .catch(() => undefined)
       }
     }
-    await transaction('readwrite', (store) =>
-      store.put({ id: manifest.id, manifest } satisfies StoredManifest)
+  }
+
+  async removeMedia(soundscapeId: string, localPaths: string[]) {
+    if (localPaths.length === 0) return
+    const directory = await this.root()
+      .then((root) => root.getDirectoryHandle(soundscapeId))
+      .catch(() => undefined)
+    if (!directory) return
+    await Promise.all(
+      localPaths.map((path) =>
+        directory.removeEntry(path).catch(() => undefined)
+      )
     )
-    localStorage.setItem(LAST_KEY, manifest.id)
   }
 
   async restore(id: string) {
