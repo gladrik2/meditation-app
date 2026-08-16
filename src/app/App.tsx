@@ -40,6 +40,10 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
   const restorationStarted = useRef(false)
   const [image, setImage] = useState<File | null>(null)
   const [savedId, setSavedId] = useState<string>()
+  const [savedName, setSavedName] = useState<string>()
+  const [savedSoundscapes, setSavedSoundscapes] = useState<
+    SoundscapeManifest[]
+  >([])
   const [saveMessage, setSaveMessage] = useState<string>()
   const localStore = useMemo(() => new LocalSoundscapeStore(), [])
   const controls = useTracks(engine)
@@ -92,6 +96,7 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
         : null
     )
     setSavedId(manifest.id)
+    setSavedName(manifest.name)
     setSaveMessage(`Restored “${manifest.name}” from this device.`)
   }
 
@@ -108,12 +113,15 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
             : 'The soundscape could not be restored.'
         )
       })
+    void localStore
+      .list()
+      .then(setSavedSoundscapes)
+      .catch(() => undefined)
     // Restoration runs only for this application/store instance.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localStore])
 
-  const buildManifest = (name: string, requestedId?: string) => {
-    const id = requestedId ?? savedId ?? crypto.randomUUID()
+  const buildManifest = (name: string, id: string) => {
     const files = new Map<string, File>()
     const uniquePath = (prefix: string, index: number, file: File) =>
       `${prefix}-${index}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
@@ -163,17 +171,23 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
     return nextSoundscapeName(saved.map(({ name }) => name))
   }
 
-  const saveLocally = async () => {
+  const refreshSavedSoundscapes = async () => {
+    setSavedSoundscapes(await localStore.list())
+  }
+
+  const saveAsNew = async () => {
     const name = window
       .prompt('Soundscape name', await suggestedSoundscapeName())
       ?.trim()
     if (!name) return
     setSaveMessage('Saving…')
     try {
-      const { manifest, files } = buildManifest(name)
+      const { manifest, files } = buildManifest(name, crypto.randomUUID())
       const persistent = await localStore.requestPersistence()
       await localStore.save(manifest, files)
       setSavedId(manifest.id)
+      setSavedName(manifest.name)
+      await refreshSavedSoundscapes()
       setSaveMessage(
         persistent
           ? `Saved “${name}” on this device.`
@@ -184,16 +198,43 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
     }
   }
 
-  const deleteSaved = async () => {
-    if (!savedId) return
+  const saveChanges = async () => {
+    if (!savedId || !savedName) return
+    setSaveMessage('Saving changes…')
     try {
-      await localStore.delete(savedId)
-      setSavedId(undefined)
+      const { manifest, files } = buildManifest(savedName, savedId)
+      await localStore.save(manifest, files)
+      await refreshSavedSoundscapes()
+      setSaveMessage(`Saved changes to “${savedName}”.`)
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : 'Saving failed.')
+    }
+  }
+
+  const deleteSaved = async (id: string) => {
+    try {
+      await localStore.delete(id)
+      if (savedId === id) {
+        setSavedId(undefined)
+        setSavedName(undefined)
+      }
+      await refreshSavedSoundscapes()
       setSaveMessage('Deleted the saved soundscape and its cached media.')
     } catch (error) {
       setSaveMessage(
         error instanceof Error ? error.message : 'Deletion failed.'
       )
+    }
+  }
+
+  const openSaved = async (id: string) => {
+    try {
+      const restored = await localStore.restore(id)
+      if (!restored) throw new Error('The saved soundscape no longer exists.')
+      await restoreSoundscape(restored)
+      localStore.setLast(id)
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : 'Opening failed.')
     }
   }
 
@@ -221,6 +262,8 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
       await publishSoundscape(manifest, files, token)
       await localStore.save(manifest, files)
       setSavedId(manifest.id)
+      setSavedName(manifest.name)
+      await refreshSavedSoundscapes()
       setSaveMessage(`Saved “${name}” to Google Drive.`)
     } catch (error) {
       setSaveMessage(
@@ -288,18 +331,56 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
             Select multiple audio files and one optional image
           </p>
           <div className="soundscape-storage-actions">
-            <button type="button" onClick={() => void saveLocally()}>
-              Save on this device
-            </button>
+            {!savedId ? (
+              <button type="button" onClick={() => void saveAsNew()}>
+                Save on this device
+              </button>
+            ) : (
+              <>
+                <button type="button" onClick={() => void saveChanges()}>
+                  Save changes
+                </button>
+                <button type="button" onClick={() => void saveAsNew()}>
+                  Save as new soundscape
+                </button>
+              </>
+            )}
             <button type="button" onClick={() => void saveToDrive()}>
               Save to Google Drive
             </button>
-            {savedId && (
-              <button type="button" onClick={() => void deleteSaved()}>
-                Delete saved soundscape
-              </button>
-            )}
           </div>
+          {savedId && savedName && (
+            <p className="current-soundscape">
+              Current saved soundscape: <strong>{savedName}</strong>
+            </p>
+          )}
+          {savedSoundscapes.length > 0 && (
+            <section
+              className="saved-soundscapes"
+              aria-labelledby="saved-title"
+            >
+              <h2 id="saved-title">Saved soundscapes</h2>
+              <ul>
+                {savedSoundscapes.map((saved) => (
+                  <li key={saved.id}>
+                    <span>{saved.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => void openSaved(saved.id)}
+                    >
+                      Open {saved.name}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void deleteSaved(saved.id)}
+                    >
+                      Delete {saved.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {saveMessage && <p role="status">{saveMessage}</p>}
         </section>
 

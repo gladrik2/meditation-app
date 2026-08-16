@@ -172,6 +172,51 @@ h1 {
 .soundscape-storage-actions button:hover {
   background: #ebe5d6;
 }
+.current-soundscape {
+  margin: 14px 0 0;
+  color: #53635a;
+  font-size: 0.85rem;
+}
+.saved-soundscapes {
+  width: min(560px, 100%);
+  margin: 20px auto 0;
+  padding: 16px;
+  border: 1px solid #d8d2c3;
+  border-radius: 12px;
+  background: #fffefa;
+  text-align: left;
+}
+.saved-soundscapes h2 {
+  margin: 0 0 10px;
+  font-family: Georgia, serif;
+  font-size: 1.2rem;
+  font-weight: 500;
+}
+.saved-soundscapes ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.saved-soundscapes li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.saved-soundscapes li span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.saved-soundscapes button {
+  padding: 7px 9px;
+  border: 1px solid #cfc9ba;
+  border-radius: 7px;
+  color: #24352c;
+  background: white;
+  font-size: 0.78rem;
+}
 .visually-hidden {
   position: absolute;
   width: 1px;

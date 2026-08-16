@@ -81,6 +81,20 @@ const manifest: SoundscapeManifest = {
   ]
 }
 
+const streamFile = (name: string) => {
+  const file = new File(['audio'], name, { type: 'audio/opus' })
+  Object.defineProperty(file, 'stream', {
+    value: () =>
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(name))
+          controller.close()
+        }
+      })
+  })
+  return file
+}
+
 describe('LocalSoundscapeStore', () => {
   beforeEach(() => {
     files.clear()
@@ -144,6 +158,42 @@ describe('LocalSoundscapeStore', () => {
     await expect(new LocalSoundscapeStore().requestPersistence()).resolves.toBe(
       false
     )
+  })
+
+  it('opens and deletes multiple records independently', async () => {
+    const store = new LocalSoundscapeStore()
+    const first = structuredClone(manifest)
+    first.id = 'first-id'
+    first.name = 'Soundscape 1'
+    const second = structuredClone(manifest)
+    second.id = 'second-id'
+    second.name = 'Soundscape 2'
+
+    await store.save(first, new Map([['rain.opus', streamFile('first.opus')]]))
+    await store.save(
+      second,
+      new Map([['rain.opus', streamFile('second.opus')]])
+    )
+
+    expect((await store.list()).map(({ name }) => name).sort()).toEqual([
+      'Soundscape 1',
+      'Soundscape 2'
+    ])
+    expect((await store.restore('first-id'))?.manifest.name).toBe(
+      'Soundscape 1'
+    )
+    expect((await store.restore('second-id'))?.manifest.name).toBe(
+      'Soundscape 2'
+    )
+
+    await store.delete('first-id')
+    expect(await store.restore('first-id')).toBeUndefined()
+    expect((await store.restore('second-id'))?.manifest.name).toBe(
+      'Soundscape 2'
+    )
+    expect((await store.list()).map(({ name }) => name)).toEqual([
+      'Soundscape 2'
+    ])
   })
 
   it('deletes obsolete OPFS files when overwriting a soundscape', async () => {

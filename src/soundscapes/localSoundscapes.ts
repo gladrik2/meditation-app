@@ -172,6 +172,10 @@ export class LocalSoundscapeStore {
     return id ? this.restore(id) : undefined
   }
 
+  setLast(id: string) {
+    localStorage.setItem(LAST_KEY, id)
+  }
+
   async list() {
     const stored = await transaction<StoredManifest[]>('readonly', (store) =>
       store.getAll()

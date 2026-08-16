@@ -45,6 +45,93 @@ describe('App', () => {
     )
   })
 
+  it('preserves identity for Save changes and creates a new ID for Save as', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(LocalSoundscapeStore.prototype, 'list').mockResolvedValue([])
+    vi.spyOn(
+      LocalSoundscapeStore.prototype,
+      'requestPersistence'
+    ).mockResolvedValue(false)
+    const save = vi
+      .spyOn(LocalSoundscapeStore.prototype, 'save')
+      .mockResolvedValue(undefined)
+    vi.spyOn(window, 'prompt')
+      .mockReturnValueOnce('Morning')
+      .mockReturnValueOnce('Evening')
+    vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce('00000000-0000-4000-8000-000000000001')
+      .mockReturnValueOnce('00000000-0000-4000-8000-000000000002')
+    render(<App engine={createMockEngine()} />)
+
+    await user.click(
+      screen.getByRole('button', { name: 'Save on this device' })
+    )
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+    expect(save.mock.calls[0][0]).toMatchObject({
+      id: '00000000-0000-4000-8000-000000000001',
+      name: 'Morning'
+    })
+    expect(screen.getByText(/Current saved soundscape:/)).toHaveTextContent(
+      'Morning'
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
+    expect(save.mock.calls[1][0]).toMatchObject({
+      id: '00000000-0000-4000-8000-000000000001',
+      name: 'Morning'
+    })
+
+    await user.click(
+      screen.getByRole('button', { name: 'Save as new soundscape' })
+    )
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(3))
+    expect(save.mock.calls[2][0]).toMatchObject({
+      id: '00000000-0000-4000-8000-000000000002',
+      name: 'Evening'
+    })
+  })
+
+  it('lists saved soundscapes and opens or deletes them independently', async () => {
+    const user = userEvent.setup()
+    const saved = (id: string, name: string): SoundscapeManifest => ({
+      version: 1,
+      id,
+      name,
+      updatedAt: '2026-08-16T00:00:00.000Z',
+      masterVolume: 1,
+      tracks: []
+    })
+    const first = saved('first-id', 'Soundscape 1')
+    const second = saved('second-id', 'Soundscape 2')
+    vi.spyOn(LocalSoundscapeStore.prototype, 'list')
+      .mockResolvedValueOnce([first, second])
+      .mockResolvedValue([first])
+    vi.spyOn(LocalSoundscapeStore.prototype, 'restore').mockResolvedValue({
+      manifest: first,
+      files: new Map()
+    })
+    const remove = vi
+      .spyOn(LocalSoundscapeStore.prototype, 'delete')
+      .mockResolvedValue(undefined)
+    render(<App engine={createMockEngine()} />)
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Open Soundscape 1' })
+    )
+    expect(screen.getByText(/Current saved soundscape:/)).toHaveTextContent(
+      'Soundscape 1'
+    )
+
+    await user.click(
+      screen.getByRole('button', { name: 'Delete Soundscape 2' })
+    )
+    expect(remove).toHaveBeenCalledWith('second-id')
+    expect(screen.getByText(/Current saved soundscape:/)).toHaveTextContent(
+      'Soundscape 1'
+    )
+  })
+
   it('continues restoring later tracks and the image when one saved track fails', async () => {
     const engine = createMockEngine()
     vi.mocked(engine.loadTrack)
