@@ -5,12 +5,19 @@ const howler = vi.hoisted(() => {
   class FakeHowl {
     handlers = new Map<string, Array<(...args: unknown[]) => void>>()
     stateValue = 'loading'
+    loopValue = false
     nextSoundId = 1
     play = vi.fn((soundId?: number) => soundId ?? this.nextSoundId++)
     pause = vi.fn((soundId: number) => this.fire('pause', soundId))
     stop = vi.fn((soundId: number) => this.fire('stop', soundId))
     unload = vi.fn()
-    loop = vi.fn()
+    loop = vi.fn((valueOrId?: boolean | number) => {
+      if (typeof valueOrId === 'boolean') {
+        this.loopValue = valueOrId
+        return this
+      }
+      return this.loopValue
+    })
     volume = vi.fn()
     fade = vi.fn()
     playing = vi.fn(() => false)
@@ -212,6 +219,22 @@ describe('HowlerAudioEngine', () => {
     expect(howl.play).toHaveBeenCalledOnce()
     howl.fire('play', 1)
     await Promise.all([firstPlay, secondPlay])
+  })
+
+  it('keeps a looping long track controllable after an end event', async () => {
+    const { engine, howl } = await finishLoad(120)
+    const listener = vi.fn()
+    engine.subscribe(listener)
+    engine.setTrackLoop('track', true)
+
+    const playing = engine.play('track')
+    howl.fire('play', 1)
+    await playing
+    howl.fire('end', 1)
+    engine.pause('track')
+
+    expect(howl.pause).toHaveBeenCalledWith(1)
+    expect(listener).not.toHaveBeenCalledWith({ id: 'track', state: 'ended' })
   })
 
   it('applies the startup fade to short sound effects', async () => {
