@@ -196,6 +196,79 @@ describe('LocalSoundscapeStore', () => {
     ])
   })
 
+  it('reuses restored media paths across repeated manifest-only saves', async () => {
+    const store = new LocalSoundscapeStore()
+    const saved = structuredClone(manifest)
+    saved.tracks[0].reference.driveFileId = 'drive-media-id'
+    await store.save(saved, new Map([['rain.opus', streamFile('rain.opus')]]))
+    const restored = await store.restore(saved.id)
+    const originalPath = restored!.manifest.tracks[0].reference.localPath
+    const physicalFiles = () =>
+      [...files.keys()].filter((path) => path.startsWith(`${saved.id}/`))
+
+    restored!.manifest.masterVolume = 0.4
+    restored!.manifest.tracks[0].volume = 0.3
+    await store.save(restored!.manifest, new Map())
+    await store.save(restored!.manifest, new Map())
+
+    expect(restored!.manifest.tracks[0].reference.localPath).toBe(originalPath)
+    expect(physicalFiles()).toEqual([`${saved.id}/${originalPath}`])
+  })
+
+  it('rewrites and removes only replaced or removed media', async () => {
+    const store = new LocalSoundscapeStore()
+    const saved = structuredClone(manifest)
+    saved.tracks.push({
+      ...saved.tracks[0],
+      name: 'birds.opus',
+      reference: { localPath: 'birds.opus' }
+    })
+    await store.save(
+      saved,
+      new Map([
+        ['rain.opus', streamFile('rain.opus')],
+        ['birds.opus', streamFile('birds.opus')]
+      ])
+    )
+    const rainPath = saved.tracks[0].reference.localPath
+    const oldBirdsPath = saved.tracks[1].reference.localPath
+    saved.tracks[1].reference.localPath = 'replacement.opus'
+
+    await store.save(
+      saved,
+      new Map([['replacement.opus', streamFile('replacement.opus')]])
+    )
+
+    expect(saved.tracks[0].reference.localPath).toBe(rainPath)
+    expect(files.has(`${saved.id}/${rainPath}`)).toBe(true)
+    expect(files.has(`${saved.id}/${oldBirdsPath}`)).toBe(false)
+    expect(
+      files.has(`${saved.id}/${saved.tracks[1].reference.localPath}`)
+    ).toBe(true)
+
+    saved.tracks.pop()
+    await store.save(saved, new Map())
+    expect(
+      [...files.keys()].filter((path) => path.startsWith(`${saved.id}/`))
+    ).toEqual([`${saved.id}/${rainPath}`])
+  })
+
+  it('maps OPFS NetworkError failures to a useful local-storage error', async () => {
+    const inaccessible = new File(['audio'], 'rain.opus')
+    Object.defineProperty(inaccessible, 'stream', {
+      value: () => {
+        throw new DOMException('NetworkError', 'NetworkError')
+      }
+    })
+
+    await expect(
+      new LocalSoundscapeStore().save(
+        structuredClone(manifest),
+        new Map([['rain.opus', inaccessible]])
+      )
+    ).rejects.toThrow(/Local browser storage could not read or write/i)
+  })
+
   it('deletes obsolete OPFS files when overwriting a soundscape', async () => {
     const store = new LocalSoundscapeStore()
     const source = new File(['audio'], 'rain.opus')

@@ -39,6 +39,7 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
   const imageRef = useRef<SoundscapeImageHandle>(null)
   const restorationStarted = useRef(false)
   const [image, setImage] = useState<File | null>(null)
+  const [imageLocalPath, setImageLocalPath] = useState<string>()
   const [savedId, setSavedId] = useState<string>()
   const [savedName, setSavedName] = useState<string>()
   const [savedSoundscapes, setSavedSoundscapes] = useState<
@@ -61,6 +62,7 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
     }
     if (selectedImages.length > 0) {
       setImage(selectedImages.at(-1) ?? null)
+      setImageLocalPath(undefined)
     }
   }
   const googleDriveAuth = useMemo(() => {
@@ -86,7 +88,8 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
       manifest.tracks.map((track) => ({
         volume: track.volume,
         isSoundEffect: track.isSoundEffect,
-        effectChance: track.effectChance
+        effectChance: track.effectChance,
+        localPath: track.reference.localPath
       }))
     )
     controls.setMasterVolume(manifest.masterVolume)
@@ -95,6 +98,7 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
         ? (files.get(manifest.image.reference.localPath) ?? null)
         : null
     )
+    setImageLocalPath(manifest.image?.reference.localPath)
     setSavedId(manifest.id)
     setSavedName(manifest.name)
     setSaveMessage(`Restored “${manifest.name}” from this device.`)
@@ -121,8 +125,13 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localStore])
 
-  const buildManifest = (name: string, id: string) => {
+  const buildManifest = (
+    name: string,
+    id: string,
+    reuseStoredMedia = false
+  ) => {
     const files = new Map<string, File>()
+    const trackIds: string[] = []
     const uniquePath = (prefix: string, index: number, file: File) =>
       `${prefix}-${index}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
     const tracks = controls.tracks
@@ -131,8 +140,12 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
         const file = controls.getTrackFile(track.id)
         if (!file)
           throw new Error(`The media file “${track.name}” is unavailable.`)
-        const localPath = uniquePath('track', index, file)
-        files.set(localPath, file)
+        const localPath =
+          reuseStoredMedia && track.localPath
+            ? track.localPath
+            : uniquePath('track', index, file)
+        if (!(reuseStoredMedia && track.localPath)) files.set(localPath, file)
+        trackIds.push(track.id)
         return {
           name: file.name,
           mimeType: file.type,
@@ -145,8 +158,11 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
       })
     let manifestImage: SoundscapeManifest['image']
     if (image) {
-      const localPath = uniquePath('image', 0, image)
-      files.set(localPath, image)
+      const localPath =
+        reuseStoredMedia && imageLocalPath
+          ? imageLocalPath
+          : uniquePath('image', 0, image)
+      if (!(reuseStoredMedia && imageLocalPath)) files.set(localPath, image)
       manifestImage = {
         name: image.name,
         mimeType: image.type,
@@ -163,7 +179,22 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
       image: manifestImage,
       tracks
     }
-    return { manifest, files }
+    return { manifest, files, trackIds }
+  }
+
+  const retainSavedMediaPaths = (
+    manifest: SoundscapeManifest,
+    trackIds: string[]
+  ) => {
+    controls.setTrackLocalPaths(
+      new Map(
+        manifest.tracks.map((track, index) => [
+          trackIds[index],
+          track.reference.localPath
+        ])
+      )
+    )
+    setImageLocalPath(manifest.image?.reference.localPath)
   }
 
   const suggestedSoundscapeName = async () => {
@@ -182,9 +213,13 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
     if (!name) return
     setSaveMessage('Saving…')
     try {
-      const { manifest, files } = buildManifest(name, crypto.randomUUID())
+      const { manifest, files, trackIds } = buildManifest(
+        name,
+        crypto.randomUUID()
+      )
       const persistent = await localStore.requestPersistence()
       await localStore.save(manifest, files)
+      retainSavedMediaPaths(manifest, trackIds)
       setSavedId(manifest.id)
       setSavedName(manifest.name)
       await refreshSavedSoundscapes()
@@ -202,8 +237,13 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
     if (!savedId || !savedName) return
     setSaveMessage('Saving changes…')
     try {
-      const { manifest, files } = buildManifest(savedName, savedId)
+      const { manifest, files, trackIds } = buildManifest(
+        savedName,
+        savedId,
+        true
+      )
       await localStore.save(manifest, files)
+      retainSavedMediaPaths(manifest, trackIds)
       await refreshSavedSoundscapes()
       setSaveMessage(`Saved changes to “${savedName}”.`)
     } catch (error) {
@@ -258,9 +298,13 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
       }
       // Publishing creates a new Drive package, so it also receives a new
       // manifest/cache identity rather than colliding with an earlier folder.
-      const { manifest, files } = buildManifest(name, crypto.randomUUID())
+      const { manifest, files, trackIds } = buildManifest(
+        name,
+        crypto.randomUUID()
+      )
       await publishSoundscape(manifest, files, token)
       await localStore.save(manifest, files)
+      retainSavedMediaPaths(manifest, trackIds)
       setSavedId(manifest.id)
       setSavedName(manifest.name)
       await refreshSavedSoundscapes()
@@ -389,7 +433,10 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
             ref={imageRef}
             image={image}
             onChoose={() => inputRef.current?.click()}
-            onRemove={() => setImage(null)}
+            onRemove={() => {
+              setImage(null)
+              setImageLocalPath(undefined)
+            }}
           />
           <MeditationTimer
             onStart={() => {

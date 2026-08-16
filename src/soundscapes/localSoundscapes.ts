@@ -41,6 +41,14 @@ const mediaFiles = (manifest: SoundscapeManifest) => [
   ...manifest.tracks
 ]
 
+const localStorageFailure = (error: unknown) =>
+  error instanceof DOMException
+    ? new Error(
+        'Local browser storage could not read or write a media file. Try again or replace the affected file.',
+        { cause: error }
+      )
+    : error
+
 export class LocalSoundscapeStore {
   async requestPersistence() {
     return (await navigator.storage?.persist?.()) ?? false
@@ -58,8 +66,8 @@ export class LocalSoundscapeStore {
       for (const media of mediaFiles(manifest)) {
         const requestedPath = media.reference.localPath
         const file = files.get(requestedPath)
-        if (!file)
-          throw new Error(`The media file “${media.name}” is unavailable.`)
+        // No File means the manifest deliberately reuses existing OPFS media.
+        if (!file) continue
         media.reference.localPath = await this.writeMedia(
           manifest.id,
           requestedPath,
@@ -70,7 +78,7 @@ export class LocalSoundscapeStore {
       await this.commitManifest(manifest)
     } catch (error) {
       await this.removeMedia(manifest.id, stagedPaths)
-      throw error
+      throw localStorageFailure(error)
     }
   }
 

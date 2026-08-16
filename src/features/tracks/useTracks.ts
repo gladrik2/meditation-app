@@ -12,12 +12,14 @@ export interface TrackViewModel {
   chance: number
   status: 'loading' | 'ready' | 'error'
   error?: string
+  localPath?: string
 }
 
 export interface RestoredTrackSettings {
   volume: number
   isSoundEffect: boolean
   effectChance: number
+  localPath?: string
 }
 
 const SOUND_EFFECT_MAX_SECONDS = 10
@@ -147,7 +149,8 @@ export function useTracks(engine: AudioEngine) {
                     status: 'ready',
                     isSoundEffect,
                     volume: saved?.volume ?? track.volume,
-                    chance: saved?.effectChance ?? track.chance
+                    chance: saved?.effectChance ?? track.chance,
+                    localPath: saved?.localPath
                   }
                 : track
             )
@@ -213,6 +216,15 @@ export function useTracks(engine: AudioEngine) {
     setTracks([])
   }
 
+  const setTrackLocalPaths = (paths: Map<string, string>) => {
+    setTracks((current) =>
+      current.map((track) => ({
+        ...track,
+        localPath: paths.get(track.id) ?? track.localPath
+      }))
+    )
+  }
+
   const setEffectChance = (id: string, chance: number) => {
     const normalizedChance = Math.max(1, Math.floor(chance) || 1)
     setTracks((current) =>
@@ -267,6 +279,7 @@ export function useTracks(engine: AudioEngine) {
     masterVolume,
     getTrackFile: (id: string) => trackFiles.current.get(id),
     clearTracks,
+    setTrackLocalPaths,
     addFiles,
     toggleTrack,
     removeTrack,

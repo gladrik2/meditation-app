@@ -187,6 +187,72 @@ describe('App', () => {
     expect(engine.loadTrack).toHaveBeenCalledTimes(2)
   })
 
+  it('reuses restored OPFS paths when saving changes repeatedly', async () => {
+    const user = userEvent.setup()
+    const manifest: SoundscapeManifest = {
+      version: 1,
+      id: 'drive-cache-id',
+      name: 'Drive import',
+      updatedAt: '2026-08-16T00:00:00.000Z',
+      masterVolume: 1,
+      image: {
+        name: 'forest.jpg',
+        mimeType: 'image/jpeg',
+        size: 5,
+        reference: { localPath: 'cached-image.media' }
+      },
+      tracks: [
+        {
+          name: 'rain.wav',
+          mimeType: 'audio/wav',
+          size: 5,
+          volume: 1,
+          isSoundEffect: false,
+          effectChance: 50,
+          reference: {
+            localPath: 'cached-rain.media',
+            driveFileId: 'drive-rain'
+          }
+        }
+      ]
+    }
+    vi.spyOn(LocalSoundscapeStore.prototype, 'restoreLast').mockResolvedValue({
+      manifest,
+      files: new Map([
+        [
+          'cached-rain.media',
+          new File(['rain'], 'rain.wav', { type: 'audio/wav' })
+        ],
+        [
+          'cached-image.media',
+          new File(['image'], 'forest.jpg', { type: 'image/jpeg' })
+        ]
+      ])
+    })
+    vi.spyOn(LocalSoundscapeStore.prototype, 'list').mockResolvedValue([
+      manifest
+    ])
+    const save = vi
+      .spyOn(LocalSoundscapeStore.prototype, 'save')
+      .mockResolvedValue(undefined)
+    render(<App engine={createMockEngine()} />)
+    await screen.findByText('rain.wav')
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(save).toHaveBeenCalledTimes(2)
+    for (const [savedManifest, newFiles] of save.mock.calls) {
+      expect(savedManifest.tracks[0].reference.localPath).toBe(
+        'cached-rain.media'
+      )
+      expect(savedManifest.image?.reference.localPath).toBe(
+        'cached-image.media'
+      )
+      expect(newFiles.size).toBe(0)
+    }
+  })
+
   it('loads multiple selected audio files and removes a track', async () => {
     const user = userEvent.setup()
     const engine = createMockEngine()
