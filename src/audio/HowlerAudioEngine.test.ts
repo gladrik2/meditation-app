@@ -164,6 +164,32 @@ describe('HowlerAudioEngine', () => {
     expect(howl.fade).toHaveBeenCalledWith(0, 0.2, 20, 1)
   })
 
+  it('leaves an already-playing track unchanged when played again', async () => {
+    const { engine, howl } = await finishLoad(30)
+    const firstPlay = engine.play('track')
+    howl.playing.mockReturnValue(true)
+    howl.fire('play', 1)
+    await firstPlay
+    howl.play.mockClear()
+    howl.volume.mockClear()
+
+    void engine.playAll(['track'])
+
+    expect(howl.play).not.toHaveBeenCalled()
+    expect(howl.volume).not.toHaveBeenCalled()
+  })
+
+  it('coalesces repeated play requests while playback is starting', async () => {
+    const { engine, howl } = await finishLoad(30)
+
+    const firstPlay = engine.playAll(['track'])
+    const secondPlay = engine.playAll(['track'])
+
+    expect(howl.play).toHaveBeenCalledOnce()
+    howl.fire('play', 1)
+    await Promise.all([firstPlay, secondPlay])
+  })
+
   it('applies the startup fade to short sound effects', async () => {
     const { engine, howl } = await finishLoad(4)
 

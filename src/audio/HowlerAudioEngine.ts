@@ -12,6 +12,7 @@ interface EngineTrack {
   url: string
   volume: number
   soundId?: number
+  playPromise?: Promise<void>
 }
 
 interface PendingTrack {
@@ -159,7 +160,10 @@ export class HowlerAudioEngine implements AudioEngine {
   async play(id: TrackId): Promise<void> {
     const track = this.tracks.get(id)
     if (!track) return
-    await new Promise<void>((resolve, reject) => {
+    if (track.soundId !== undefined && track.howl.playing(track.soundId)) return
+    if (track.playPromise) return track.playPromise
+
+    const playPromise = new Promise<void>((resolve, reject) => {
       if (track.soundId !== undefined) track.howl.volume(0, track.soundId)
       const soundId = track.howl.play(track.soundId)
       track.soundId = soundId
@@ -168,6 +172,12 @@ export class HowlerAudioEngine implements AudioEngine {
       track.howl.once('playerror', (_id, error) => reject(error), soundId)
       if (track.howl.playing(soundId)) resolve()
     })
+    track.playPromise = playPromise
+    try {
+      await playPromise
+    } finally {
+      if (track.playPromise === playPromise) track.playPromise = undefined
+    }
   }
 
   pause(id: TrackId): void {
