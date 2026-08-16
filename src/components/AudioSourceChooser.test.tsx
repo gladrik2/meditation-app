@@ -65,7 +65,7 @@ describe('AudioSourceChooser', () => {
     ).not.toBeInTheDocument()
     await user.click(
       screen.getByRole('button', {
-        name: 'Open saved soundscape from Google Drive'
+        name: 'Import soundscape from Google Drive'
       })
     )
     expect(driveAuth.connect).not.toHaveBeenCalled()
@@ -83,9 +83,7 @@ describe('AudioSourceChooser', () => {
       />
     )
     await user.click(screen.getByRole('button', { name: 'Add files' }))
-    await user.click(
-      screen.getByRole('button', { name: /Open saved soundscape/ })
-    )
+    await user.click(screen.getByRole('button', { name: /Import soundscape/ }))
     await user.click(screen.getByRole('button', { name: 'Pick manifest' }))
     expect(open).toHaveBeenCalledWith('manifest-id', 'token')
   })
@@ -100,7 +98,7 @@ describe('AudioSourceChooser', () => {
       />
     )
     await user.click(screen.getByRole('button', { name: 'Add files' }))
-    await user.click(screen.getByRole('button', { name: /Open saved/ }))
+    await user.click(screen.getByRole('button', { name: /Import soundscape/ }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
     rerender(
@@ -111,7 +109,7 @@ describe('AudioSourceChooser', () => {
       />
     )
     await user.click(screen.getByRole('button', { name: 'Add files' }))
-    await user.click(screen.getByRole('button', { name: /Open saved/ }))
+    await user.click(screen.getByRole('button', { name: /Import soundscape/ }))
     await user.click(screen.getByRole('button', { name: 'Cancel Picker' }))
     expect(screen.queryByText(/failed|error/i)).not.toBeInTheDocument()
   })
@@ -128,11 +126,13 @@ describe('AudioSourceChooser', () => {
       />
     )
     await user.click(screen.getByRole('button', { name: 'Add files' }))
-    await user.click(screen.getByRole('button', { name: /Open saved/ }))
+    await user.click(screen.getByRole('button', { name: /Import soundscape/ }))
     await user.click(screen.getByRole('button', { name: 'Pick manifest' }))
     expect(
       await screen.findByText('Drive transfer was interrupted.')
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Open saved/ })).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: /Import soundscape/ })
+    ).toBeEnabled()
   })
 })

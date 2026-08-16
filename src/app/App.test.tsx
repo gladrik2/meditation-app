@@ -49,7 +49,7 @@ describe('App', () => {
     render(<App engine={createMockEngine()} />)
     expect(screen.getByText('Your soundscape is empty')).toBeInTheDocument()
     expect(
-      screen.getByText(/unless you explicitly save.*Google Drive/i)
+      screen.getByText(/unless you explicitly export.*Google Drive/i)
     ).toBeInTheDocument()
     expect(screen.getByText(/Unsaved files are forgotten/i)).toBeInTheDocument()
   })
@@ -82,7 +82,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Add files' }))
     await user.click(
       screen.getByRole('button', {
-        name: 'Open saved soundscape from Google Drive'
+        name: 'Import soundscape from Google Drive'
       })
     )
     await user.click(
@@ -116,7 +116,7 @@ describe('App', () => {
     }
     render(<App engine={createMockEngine()} driveAuth={driveAuth} />)
     const newCopy = screen.getByRole('button', {
-      name: 'Save a new copy to Google Drive'
+      name: 'Export soundscape to Google Drive'
     })
 
     await user.click(newCopy)
@@ -138,7 +138,7 @@ describe('App', () => {
       new Set(localSave.mock.calls.map(([manifest]) => manifest.id)).size
     ).toBe(2)
     expect(
-      screen.getByText('Created a new Google Drive copy of “Shared calm”.')
+      screen.getByText('Exported a new copy of “Shared calm” to Google Drive.')
     ).toBeInTheDocument()
   })
 
@@ -240,6 +240,11 @@ describe('App', () => {
       screen.getByRole('button', { name: 'Delete Soundscape 2' })
     )
     expect(remove).toHaveBeenCalledWith('second-id')
+    expect(
+      await screen.findByText(
+        'Deleted the local saved soundscape and its cached media.'
+      )
+    ).toBeInTheDocument()
     expect(screen.getByText(/Current soundscape:/)).toHaveTextContent(
       'Soundscape 1'
     )

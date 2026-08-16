@@ -116,10 +116,10 @@ export function AudioSourceChooser({
                 onClick={() => void chooseDrive()}
               >
                 {downloading
-                  ? 'Downloading soundscape…'
+                  ? 'Importing soundscape…'
                   : busy
                     ? 'Connecting…'
-                    : 'Open saved soundscape from Google Drive'}
+                    : 'Import soundscape from Google Drive'}
               </button>
             )}
             {error && <p className="source-chooser-error">{error}</p>}

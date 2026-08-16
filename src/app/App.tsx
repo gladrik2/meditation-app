@@ -260,7 +260,7 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
         setSavedName(undefined)
       }
       await refreshSavedSoundscapes()
-      setSaveMessage('Deleted the saved soundscape and its cached media.')
+      setSaveMessage('Deleted the local saved soundscape and its cached media.')
     } catch (error) {
       setSaveMessage(
         error instanceof Error ? error.message : 'Deletion failed.'
@@ -290,7 +290,7 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
       .prompt('Soundscape name', await suggestedSoundscapeName())
       ?.trim()
     if (!name) return
-    setSaveMessage('Creating a new Google Drive copy…')
+    setSaveMessage('Exporting a new soundscape copy to Google Drive…')
     try {
       const token = await driveToken()
       if (!token) {
@@ -309,7 +309,7 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
       setSavedId(manifest.id)
       setSavedName(manifest.name)
       await refreshSavedSoundscapes()
-      setSaveMessage(`Created a new Google Drive copy of “${name}”.`)
+      setSaveMessage(`Exported a new copy of “${name}” to Google Drive.`)
     } catch (error) {
       setSaveMessage(
         error instanceof Error ? error.message : 'Drive upload failed.'
@@ -337,8 +337,8 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
           </h1>
           <p className="intro">
             Mix multiple audio tracks into a personal soundscape. Audio is
-            processed locally in your browser unless you explicitly save a
-            soundscape to your Google Drive.
+            processed locally in your browser unless you explicitly export a
+            soundscape to Google Drive.
           </p>
           <input
             ref={inputRef}
@@ -357,7 +357,7 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
             driveAuth={googleDriveAuth}
             onChooseDevice={() => inputRef.current?.click()}
             onOpenDriveSoundscape={async (fileId, token) => {
-              setSaveMessage('Downloading soundscape from Google Drive…')
+              setSaveMessage('Importing soundscape from Google Drive…')
               try {
                 await restoreSoundscape(
                   await importDriveSoundscape(fileId, token, localStore),
@@ -393,7 +393,7 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
               </>
             )}
             <button type="button" onClick={() => void saveToDrive()}>
-              Save a new copy to Google Drive
+              Export soundscape to Google Drive
             </button>
           </div>
           {savedId && savedName && (
