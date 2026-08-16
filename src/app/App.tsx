@@ -73,7 +73,8 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
   }, [driveAuth])
 
   const restoreSoundscape = async (
-    restored: Awaited<ReturnType<LocalSoundscapeStore['restoreLast']>>
+    restored: Awaited<ReturnType<LocalSoundscapeStore['restoreLast']>>,
+    source: 'this device' | 'Google Drive' = 'this device'
   ) => {
     if (!restored) return
     const { manifest, files } = restored
@@ -101,7 +102,7 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
     setImageLocalPath(manifest.image?.reference.localPath)
     setSavedId(manifest.id)
     setSavedName(manifest.name)
-    setSaveMessage(`Restored “${manifest.name}” from this device.`)
+    setSaveMessage(`Restored “${manifest.name}” from ${source}.`)
   }
 
   useEffect(() => {
@@ -289,7 +290,7 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
       .prompt('Soundscape name', await suggestedSoundscapeName())
       ?.trim()
     if (!name) return
-    setSaveMessage('Uploading to Google Drive…')
+    setSaveMessage('Creating a new Google Drive copy…')
     try {
       const token = await driveToken()
       if (!token) {
@@ -308,7 +309,7 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
       setSavedId(manifest.id)
       setSavedName(manifest.name)
       await refreshSavedSoundscapes()
-      setSaveMessage(`Saved “${name}” to Google Drive.`)
+      setSaveMessage(`Created a new Google Drive copy of “${name}”.`)
     } catch (error) {
       setSaveMessage(
         error instanceof Error ? error.message : 'Drive upload failed.'
@@ -359,8 +360,10 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
               setSaveMessage('Downloading soundscape from Google Drive…')
               try {
                 await restoreSoundscape(
-                  await importDriveSoundscape(fileId, token, localStore)
+                  await importDriveSoundscape(fileId, token, localStore),
+                  'Google Drive'
                 )
+                await refreshSavedSoundscapes()
               } catch (error) {
                 setSaveMessage(
                   error instanceof Error
@@ -390,12 +393,12 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
               </>
             )}
             <button type="button" onClick={() => void saveToDrive()}>
-              Save to Google Drive
+              Save a new copy to Google Drive
             </button>
           </div>
           {savedId && savedName && (
             <p className="current-soundscape">
-              Current saved soundscape: <strong>{savedName}</strong>
+              Current soundscape: <strong>{savedName}</strong>
             </p>
           )}
           {savedSoundscapes.length > 0 && (

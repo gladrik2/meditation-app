@@ -196,7 +196,7 @@ describe('LocalSoundscapeStore', () => {
     ])
   })
 
-  it('reuses restored media paths across repeated manifest-only saves', async () => {
+  it('upserts one record when the same Drive manifest ID is cached repeatedly', async () => {
     const store = new LocalSoundscapeStore()
     const saved = structuredClone(manifest)
     saved.tracks[0].reference.driveFileId = 'drive-media-id'
@@ -213,6 +213,9 @@ describe('LocalSoundscapeStore', () => {
 
     expect(restored!.manifest.tracks[0].reference.localPath).toBe(originalPath)
     expect(physicalFiles()).toEqual([`${saved.id}/${originalPath}`])
+    expect(
+      (await store.list()).filter(({ id }) => id === saved.id)
+    ).toHaveLength(1)
   })
 
   it('rewrites and removes only replaced or removed media', async () => {

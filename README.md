@@ -19,7 +19,7 @@ React, strict TypeScript, Vite, the Web Audio API, `vite-plugin-pwa`, Vitest, Re
 
 ## Privacy model
 
-Audio and the optional soundscape image are processed locally. Unsaved selections remain in memory and are forgotten on refresh or close. When you choose **Save on this device**, media is streamed into the browser's private Origin Private File System and manifest metadata is stored in IndexedDB so the last saved soundscape works offline. When you explicitly choose **Save to Google Drive**, the app creates a visible Drive folder and uploads the soundscape media plus `soundscape.json` directly to your Drive; the app has no server copy. Drive imports are cached in private browser storage for offline playback. Files, contents, and filenames are never sent to analytics or added to service-worker caches. You can delete a saved soundscape and its local cache at any time.
+Audio and the optional soundscape image are processed locally. Unsaved selections remain in memory and are forgotten on refresh or close. When you choose **Save on this device**, media is streamed into the browser's private Origin Private File System and manifest metadata is stored in IndexedDB so the last saved soundscape works offline. When you explicitly choose **Save a new copy to Google Drive**, the app creates a new visible Drive folder and uploads the soundscape media plus `soundscape.json` directly to your Drive; it does not update a previous Drive package, and the app has no server copy. Drive imports are cached in private browser storage for offline playback. Files, contents, and filenames are never sent to analytics or added to service-worker caches. You can delete a saved soundscape and its local cache at any time.
 
 ## Development
 

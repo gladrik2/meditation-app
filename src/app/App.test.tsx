@@ -6,6 +6,31 @@ import { AudioEngineLoadError } from '../audio/types'
 import { App } from './App'
 import { LocalSoundscapeStore } from '../soundscapes/localSoundscapes'
 import type { SoundscapeManifest } from '../soundscapes/manifest'
+import type { GoogleDriveAuth } from '../googleDrive/googleDriveAuth'
+
+const driveOperations = vi.hoisted(() => ({
+  importSoundscape: vi.fn(),
+  publishSoundscape: vi.fn()
+}))
+
+vi.mock('../googleDrive/googleDriveSoundscapes', () => ({
+  importDriveSoundscape: driveOperations.importSoundscape,
+  publishSoundscape: driveOperations.publishSoundscape
+}))
+
+vi.mock('@googleworkspace/drive-picker-react', () => ({
+  DrivePicker: ({ onPicked }: { onPicked(event: object): void }) => (
+    <button
+      type="button"
+      onClick={() =>
+        onPicked({ detail: { docs: [{ id: 'drive-manifest-id' }] } })
+      }
+    >
+      Pick saved Drive soundscape
+    </button>
+  ),
+  DrivePickerDocsView: () => null
+}))
 
 const audioFile = (name: string) =>
   new File(['not-real-audio'], name, { type: 'audio/wav' })
@@ -16,6 +41,8 @@ describe('App', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.restoreAllMocks()
+    driveOperations.importSoundscape.mockReset()
+    driveOperations.publishSoundscape.mockReset()
   })
 
   it('shows the private empty state initially', () => {
@@ -25,6 +52,94 @@ describe('App', () => {
       screen.getByText(/unless you explicitly save.*Google Drive/i)
     ).toBeInTheDocument()
     expect(screen.getByText(/Unsaved files are forgotten/i)).toBeInTheDocument()
+  })
+
+  it('adds a Drive import to Saved soundscapes immediately', async () => {
+    const user = userEvent.setup()
+    const imported: SoundscapeManifest = {
+      version: 1,
+      id: 'imported-id',
+      name: 'Soundscape 2',
+      updatedAt: '2026-08-16T00:00:00.000Z',
+      masterVolume: 1,
+      tracks: []
+    }
+    driveOperations.importSoundscape.mockResolvedValue({
+      manifest: imported,
+      files: new Map()
+    })
+    vi.spyOn(LocalSoundscapeStore.prototype, 'list')
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([imported])
+    const driveAuth: GoogleDriveAuth = {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      getAccessToken: vi.fn().mockReturnValue('token'),
+      isConnected: vi.fn().mockReturnValue(true)
+    }
+    render(<App engine={createMockEngine()} driveAuth={driveAuth} />)
+
+    await user.click(screen.getByRole('button', { name: 'Add files' }))
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Open saved soundscape from Google Drive'
+      })
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Pick saved Drive soundscape' })
+    )
+
+    expect(
+      await screen.findByRole('button', { name: 'Open Soundscape 2' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Restored “Soundscape 2” from Google Drive.')
+    ).toBeInTheDocument()
+  })
+
+  it('publishes duplicate names only as explicitly requested new Drive copies', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(LocalSoundscapeStore.prototype, 'list').mockResolvedValue([])
+    const localSave = vi
+      .spyOn(LocalSoundscapeStore.prototype, 'save')
+      .mockResolvedValue(undefined)
+    vi.spyOn(window, 'prompt').mockReturnValue('Shared calm')
+    vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce('00000000-0000-4000-8000-000000000011')
+      .mockReturnValueOnce('00000000-0000-4000-8000-000000000012')
+    driveOperations.publishSoundscape.mockResolvedValue('folder-id')
+    const driveAuth: GoogleDriveAuth = {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      getAccessToken: vi.fn().mockReturnValue('token'),
+      isConnected: vi.fn().mockReturnValue(true)
+    }
+    render(<App engine={createMockEngine()} driveAuth={driveAuth} />)
+    const newCopy = screen.getByRole('button', {
+      name: 'Save a new copy to Google Drive'
+    })
+
+    await user.click(newCopy)
+    await user.click(newCopy)
+
+    await waitFor(() =>
+      expect(driveOperations.publishSoundscape).toHaveBeenCalledTimes(2)
+    )
+    const published = driveOperations.publishSoundscape.mock.calls.map(
+      ([manifest]) => manifest as SoundscapeManifest
+    )
+    expect(published.map(({ name }) => name)).toEqual([
+      'Shared calm',
+      'Shared calm'
+    ])
+    expect(new Set(published.map(({ id }) => id)).size).toBe(2)
+    expect(localSave).toHaveBeenCalledTimes(2)
+    expect(
+      new Set(localSave.mock.calls.map(([manifest]) => manifest.id)).size
+    ).toBe(2)
+    expect(
+      screen.getByText('Created a new Google Drive copy of “Shared calm”.')
+    ).toBeInTheDocument()
   })
 
   it('suggests the first unused numbered name when saving', async () => {
@@ -71,9 +186,7 @@ describe('App', () => {
       id: '00000000-0000-4000-8000-000000000001',
       name: 'Morning'
     })
-    expect(screen.getByText(/Current saved soundscape:/)).toHaveTextContent(
-      'Morning'
-    )
+    expect(screen.getByText(/Current soundscape:/)).toHaveTextContent('Morning')
 
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
@@ -119,7 +232,7 @@ describe('App', () => {
     await user.click(
       await screen.findByRole('button', { name: 'Open Soundscape 1' })
     )
-    expect(screen.getByText(/Current saved soundscape:/)).toHaveTextContent(
+    expect(screen.getByText(/Current soundscape:/)).toHaveTextContent(
       'Soundscape 1'
     )
 
@@ -127,7 +240,7 @@ describe('App', () => {
       screen.getByRole('button', { name: 'Delete Soundscape 2' })
     )
     expect(remove).toHaveBeenCalledWith('second-id')
-    expect(screen.getByText(/Current saved soundscape:/)).toHaveTextContent(
+    expect(screen.getByText(/Current soundscape:/)).toHaveTextContent(
       'Soundscape 1'
     )
   })
