@@ -31,6 +31,15 @@ export interface SoundscapeManifest {
   tracks: ManifestTrack[]
 }
 
+export function nextSoundscapeName(existingNames: Iterable<string>) {
+  const taken = new Set(
+    [...existingNames].map((name) => name.trim().toLocaleLowerCase())
+  )
+  let number = 1
+  while (taken.has(`soundscape ${number}`)) number += 1
+  return `Soundscape ${number}`
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
 

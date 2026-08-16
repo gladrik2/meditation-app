@@ -132,6 +132,7 @@ describe('LocalSoundscapeStore', () => {
       name: expect.stringMatching(/rain\.opus\..+\.media$/),
       type: ''
     })
+    expect((await store.list()).map(({ name }) => name)).toContain('Offline')
 
     await store.delete(manifest.id)
     expect(await store.restoreLast()).toBeUndefined()

@@ -17,6 +17,7 @@ import {
 import { LocalSoundscapeStore } from '../soundscapes/localSoundscapes'
 import {
   SOUNDSCAPE_MANIFEST_VERSION,
+  nextSoundscapeName,
   type SoundscapeManifest
 } from '../soundscapes/manifest'
 import {
@@ -157,8 +158,15 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
     return { manifest, files }
   }
 
+  const suggestedSoundscapeName = async () => {
+    const saved = await localStore.list().catch(() => [])
+    return nextSoundscapeName(saved.map(({ name }) => name))
+  }
+
   const saveLocally = async () => {
-    const name = window.prompt('Soundscape name', 'My soundscape')?.trim()
+    const name = window
+      .prompt('Soundscape name', await suggestedSoundscapeName())
+      ?.trim()
     if (!name) return
     setSaveMessage('Saving…')
     try {
@@ -196,7 +204,9 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
   }
 
   const saveToDrive = async () => {
-    const name = window.prompt('Soundscape name', 'My soundscape')?.trim()
+    const name = window
+      .prompt('Soundscape name', await suggestedSoundscapeName())
+      ?.trim()
     if (!name) return
     setSaveMessage('Uploading to Google Drive…')
     try {

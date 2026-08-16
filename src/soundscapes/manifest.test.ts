@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseSoundscapeManifest } from './manifest'
+import { nextSoundscapeName, parseSoundscapeManifest } from './manifest'
 
 const track = {
   name: 'rain.opus',
@@ -12,6 +12,18 @@ const track = {
 }
 
 describe('soundscape manifest', () => {
+  it('suggests the first available numbered soundscape name', () => {
+    expect(nextSoundscapeName([])).toBe('Soundscape 1')
+    expect(
+      nextSoundscapeName([
+        'Soundscape 1',
+        'soundscape 2',
+        'A custom name',
+        ' Soundscape 3 '
+      ])
+    ).toBe('Soundscape 4')
+  })
+
   it('migrates an unversioned manifest and supplies the default master volume', () => {
     const manifest = parseSoundscapeManifest({
       id: 'saved-id',

@@ -27,6 +27,24 @@ describe('App', () => {
     expect(screen.getByText(/Unsaved files are forgotten/i)).toBeInTheDocument()
   })
 
+  it('suggests the first unused numbered name when saving', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(LocalSoundscapeStore.prototype, 'list').mockResolvedValue([
+      { name: 'Soundscape 1' },
+      { name: 'soundscape 2' }
+    ] as SoundscapeManifest[])
+    const prompt = vi.spyOn(window, 'prompt').mockReturnValue(null)
+    render(<App engine={createMockEngine()} />)
+
+    await user.click(
+      screen.getByRole('button', { name: 'Save on this device' })
+    )
+
+    await waitFor(() =>
+      expect(prompt).toHaveBeenCalledWith('Soundscape name', 'Soundscape 3')
+    )
+  })
+
   it('continues restoring later tracks and the image when one saved track fails', async () => {
     const engine = createMockEngine()
     vi.mocked(engine.loadTrack)

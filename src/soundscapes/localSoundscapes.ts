@@ -172,6 +172,13 @@ export class LocalSoundscapeStore {
     return id ? this.restore(id) : undefined
   }
 
+  async list() {
+    const stored = await transaction<StoredManifest[]>('readonly', (store) =>
+      store.getAll()
+    )
+    return stored.map(({ manifest }) => parseSoundscapeManifest(manifest))
+  }
+
   async delete(id: string) {
     const root = await this.root()
     await root.removeEntry(id, { recursive: true }).catch(() => undefined)
