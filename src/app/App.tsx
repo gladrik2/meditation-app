@@ -290,15 +290,13 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
       .prompt('Soundscape name', await suggestedSoundscapeName())
       ?.trim()
     if (!name) return
-    setSaveMessage('Exporting a new soundscape copy to Google Drive…')
+    setSaveMessage('Exporting soundscape to Google Drive…')
     try {
       const token = await driveToken()
       if (!token) {
         setSaveMessage(undefined)
         return
       }
-      // Publishing creates a new Drive package, so it also receives a new
-      // manifest/cache identity rather than colliding with an earlier folder.
       const { manifest, files, trackIds } = buildManifest(
         name,
         crypto.randomUUID()
@@ -309,7 +307,7 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
       setSavedId(manifest.id)
       setSavedName(manifest.name)
       await refreshSavedSoundscapes()
-      setSaveMessage(`Exported a new copy of “${name}” to Google Drive.`)
+      setSaveMessage(`Exported “${name}” to Google Drive.`)
     } catch (error) {
       setSaveMessage(
         error instanceof Error ? error.message : 'Drive upload failed.'

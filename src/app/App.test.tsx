@@ -97,7 +97,7 @@ describe('App', () => {
     ).toBeInTheDocument()
   })
 
-  it('publishes duplicate names only as explicitly requested new Drive copies', async () => {
+  it('exports duplicate names with distinct manifest IDs', async () => {
     const user = userEvent.setup()
     vi.spyOn(LocalSoundscapeStore.prototype, 'list').mockResolvedValue([])
     const localSave = vi
@@ -138,7 +138,7 @@ describe('App', () => {
       new Set(localSave.mock.calls.map(([manifest]) => manifest.id)).size
     ).toBe(2)
     expect(
-      screen.getByText('Exported a new copy of “Shared calm” to Google Drive.')
+      screen.getByText('Exported “Shared calm” to Google Drive.')
     ).toBeInTheDocument()
   })
 
