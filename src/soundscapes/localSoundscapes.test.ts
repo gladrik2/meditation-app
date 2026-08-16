@@ -33,7 +33,7 @@ const directory = (name: string): FileSystemDirectoryHandle =>
                 const stored = new File(
                   chunks as unknown as BlobPart[],
                   filename,
-                  { type: 'audio/opus' }
+                  { type: '' }
                 )
                 Object.defineProperty(stored, 'stream', {
                   value: () =>
@@ -124,7 +124,14 @@ describe('LocalSoundscapeStore', () => {
     const restored = await store.restoreLast()
 
     expect(restored?.manifest.name).toBe('Offline')
-    expect([...restored!.files.values()][0].name).toContain('rain.opus')
+    expect([...restored!.files.values()][0]).toMatchObject({
+      name: 'rain.opus',
+      type: 'audio/opus'
+    })
+    expect([...files.values()][0]).toMatchObject({
+      name: expect.stringMatching(/rain\.opus\..+\.media$/),
+      type: ''
+    })
 
     await store.delete(manifest.id)
     expect(await store.restoreLast()).toBeUndefined()

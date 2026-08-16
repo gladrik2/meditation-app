@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createMockEngine } from '../test/mockEngine'
 import { AudioEngineLoadError } from '../audio/types'
 import { App } from './App'
+import { LocalSoundscapeStore } from '../soundscapes/localSoundscapes'
+import type { SoundscapeManifest } from '../soundscapes/manifest'
 
 const audioFile = (name: string) =>
   new File(['not-real-audio'], name, { type: 'audio/wav' })
@@ -23,6 +25,61 @@ describe('App', () => {
       screen.getByText(/unless you explicitly save.*Google Drive/i)
     ).toBeInTheDocument()
     expect(screen.getByText(/Unsaved files are forgotten/i)).toBeInTheDocument()
+  })
+
+  it('continues restoring later tracks and the image when one saved track fails', async () => {
+    const engine = createMockEngine()
+    vi.mocked(engine.loadTrack)
+      .mockRejectedValueOnce(new Error('broken saved file'))
+      .mockResolvedValueOnce(120)
+    const manifest: SoundscapeManifest = {
+      version: 1,
+      id: 'saved-id',
+      name: 'Saved scene',
+      updatedAt: '2026-08-16T00:00:00.000Z',
+      masterVolume: 0.6,
+      image: {
+        name: 'forest.jpg',
+        mimeType: 'image/jpeg',
+        size: 5,
+        reference: { localPath: 'image.media' }
+      },
+      tracks: ['broken.wav', 'rain.wav'].map((name, index) => ({
+        name,
+        mimeType: 'audio/wav',
+        size: 5,
+        volume: 0.5,
+        isSoundEffect: false,
+        effectChance: 50,
+        reference: { localPath: `track-${index}.media` }
+      }))
+    }
+    vi.spyOn(LocalSoundscapeStore.prototype, 'restoreLast').mockResolvedValue({
+      manifest,
+      files: new Map([
+        [
+          'track-0.media',
+          new File(['bad'], 'broken.wav', { type: 'audio/wav' })
+        ],
+        [
+          'track-1.media',
+          new File(['rain'], 'rain.wav', { type: 'audio/wav' })
+        ],
+        [
+          'image.media',
+          new File(['image'], 'forest.jpg', { type: 'image/jpeg' })
+        ]
+      ])
+    })
+
+    render(<App engine={engine} />)
+
+    expect(
+      await screen.findByText('This audio file could not be read or decoded.')
+    ).toBeInTheDocument()
+    expect(await screen.findByText('rain.wav')).toBeInTheDocument()
+    expect(await screen.findByText('forest.jpg')).toBeInTheDocument()
+    expect(engine.loadTrack).toHaveBeenCalledTimes(2)
   })
 
   it('loads multiple selected audio files and removes a track', async () => {

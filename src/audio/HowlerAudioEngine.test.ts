@@ -108,6 +108,30 @@ describe('HowlerAudioEngine', () => {
     expect(howl.volume).not.toHaveBeenCalledWith(0.2, expect.anything())
   })
 
+  it('ignores internal storage suffixes and uses the audio MIME format', async () => {
+    const { howl } = await finishLoad(
+      120,
+      'track-0-meditation.wav.random.media'
+    )
+
+    expect(howl.options.format).toEqual(['ogg'])
+  })
+
+  it('times out a track that never finishes metadata loading', async () => {
+    vi.useFakeTimers()
+    const engine = new HowlerAudioEngine()
+    const loading = engine.loadTrack(
+      'stuck-track',
+      new File(['bad'], 'broken.wav', { type: 'audio/wav' })
+    )
+    const timedOut = expect(loading).rejects.toThrow(/too long to load/i)
+
+    await vi.advanceTimersByTimeAsync(15_000)
+
+    await timedOut
+    vi.useRealTimers()
+  })
+
   it('uses normal Howler Web Audio playback for short effects and the gong', async () => {
     const { engine, howl } = await finishLoad(4)
     expect(howl.options.html5).toBe(false)

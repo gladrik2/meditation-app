@@ -153,10 +153,16 @@ export class LocalSoundscapeStore {
     const directory = await (await this.root()).getDirectoryHandle(id)
     const files = new Map<string, File>()
     for (const media of mediaFiles(manifest)) {
-      const file = await (
+      const storedFile = await (
         await directory.getFileHandle(media.reference.localPath)
       ).getFile()
-      files.set(media.reference.localPath, file)
+      files.set(
+        media.reference.localPath,
+        new File([storedFile], media.name, {
+          type: media.mimeType,
+          lastModified: storedFile.lastModified
+        })
+      )
     }
     return { manifest, files }
   }
