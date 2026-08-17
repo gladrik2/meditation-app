@@ -500,6 +500,64 @@ describe('App', () => {
     expect(viewer.querySelectorAll('button')).toHaveLength(0)
   })
 
+  it('distinguishes touch taps from pans and pinches and clears pending taps', async () => {
+    const user = userEvent.setup()
+    render(<App engine={createMockEngine()} />)
+    await user.upload(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      imageFile('forest.jpg')
+    )
+    await user.click(screen.getByRole('button', { name: 'Theater mode' }))
+    const viewer = screen.getByRole('dialog', {
+      name: /Soundscape image viewer/
+    })
+    const displayedImage = viewer.querySelector('img')!
+    const touch = (
+      type: 'pointerDown' | 'pointerMove' | 'pointerUp',
+      pointerId: number,
+      x: number,
+      y: number
+    ) =>
+      fireEvent[type](viewer, {
+        pointerId,
+        pointerType: 'touch',
+        clientX: x,
+        clientY: y
+      })
+
+    touch('pointerDown', 1, 100, 100)
+    touch('pointerMove', 1, 130, 100)
+    touch('pointerUp', 1, 130, 100)
+    touch('pointerDown', 1, 130, 100)
+    touch('pointerUp', 1, 130, 100)
+    expect(displayedImage.style.transform).toContain('scale(1)')
+
+    touch('pointerDown', 1, 100, 100)
+    touch('pointerDown', 2, 100, 100)
+    touch('pointerMove', 2, 100.5, 100)
+    touch('pointerUp', 2, 100.5, 100)
+    touch('pointerUp', 1, 100, 100)
+    touch('pointerDown', 1, 100, 100)
+    touch('pointerUp', 1, 100, 100)
+    expect(displayedImage.style.transform).toContain('scale(1)')
+    expect(displayedImage.style.transform).not.toContain('NaN')
+
+    fireEvent.keyDown(document, { key: '0' })
+    touch('pointerDown', 1, 200, 200)
+    touch('pointerUp', 1, 200, 200)
+    touch('pointerDown', 1, 200, 200)
+    touch('pointerUp', 1, 200, 200)
+    expect(displayedImage.style.transform).toContain('scale(2)')
+    touch('pointerDown', 1, 200, 200)
+    touch('pointerUp', 1, 200, 200)
+    expect(displayedImage.style.transform).toContain('scale(2)')
+
+    fireEvent.keyDown(document, { key: '0' })
+    touch('pointerDown', 1, 250, 250)
+    touch('pointerUp', 1, 250, 250)
+    expect(displayedImage.style.transform).toContain('scale(1)')
+  })
+
   it('sorts audio and image files selected through the same upload control', async () => {
     const user = userEvent.setup()
     const engine = createMockEngine()

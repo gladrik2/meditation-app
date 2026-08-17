@@ -100,6 +100,30 @@ test('Full screen retains Theater mode when fullscreen is unavailable', async ({
   await page.getByRole('button', { name: 'Full screen' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await expectImageWithinViewport(page)
+  await page.goBack()
+  await expect(page.getByRole('dialog')).toBeHidden()
+  await expect(
+    page.getByRole('heading', { name: /Layer sounds/ })
+  ).toBeVisible()
+})
+
+test('rejected fullscreen falls back to Theater mode and browser Back closes it', async ({
+  page
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(Element.prototype, 'requestFullscreen', {
+      configurable: true,
+      value: () => Promise.reject(new Error('Fullscreen denied'))
+    })
+  })
+  await uploadLargeImage(page)
+  await page.getByRole('button', { name: 'Full screen' }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.goBack()
+  await expect(page.getByRole('dialog')).toBeHidden()
+  await expect(
+    page.getByRole('heading', { name: /Layer sounds/ })
+  ).toBeVisible()
 })
 
 test('large image fits within every viewport edge in native full screen', async ({

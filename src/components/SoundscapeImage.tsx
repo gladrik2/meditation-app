@@ -22,7 +22,9 @@ export interface SoundscapeImageHandle {
 
 type Point = { x: number; y: number }
 type View = Point & { scale: number }
+type Gesture = { origins: Map<number, Point>; moved: boolean; multi: boolean }
 const FIT_VIEW: View = { x: 0, y: 0, scale: 1 }
+const TAP_MOVE_THRESHOLD = 8
 
 export const SoundscapeImage = forwardRef<
   SoundscapeImageHandle,
@@ -42,6 +44,7 @@ export const SoundscapeImage = forwardRef<
   const historyEntry = useRef(false)
   const restoreFocus = useRef<HTMLElement | null>(null)
   const pointers = useRef(new Map<number, Point>())
+  const gesture = useRef<Gesture | null>(null)
   const lastTap = useRef<(Point & { time: number }) | null>(null)
   const viewRef = useRef(view)
   viewRef.current = view
@@ -73,6 +76,8 @@ export const SoundscapeImage = forwardRef<
 
   const resetView = useCallback(() => {
     pointers.current.clear()
+    gesture.current = null
+    lastTap.current = null
     viewRef.current = FIT_VIEW
     setView(FIT_VIEW)
   }, [])
@@ -181,16 +186,19 @@ export const SoundscapeImage = forwardRef<
     }
   }, [closeViewer, isTheater, resetView, showBlackout, updateView])
 
-  const openTheater = () => {
+  const openViewer = () => {
     resetView()
-    history.pushState({ imageTheater: true }, '')
-    historyEntry.current = true
+    if (!historyEntry.current) {
+      history.pushState({ imageViewer: true }, '')
+      historyEntry.current = true
+    }
     setIsTheater(true)
   }
 
+  const openTheater = () => openViewer()
+
   const enterFullscreen = async () => {
-    resetView()
-    flushSync(() => setIsTheater(true))
+    flushSync(openViewer)
     const request = viewerRef.current?.requestFullscreen
     if (!request) return
     try {
@@ -234,10 +242,22 @@ export const SoundscapeImage = forwardRef<
     if (showBlackout) return
     if (event.currentTarget.setPointerCapture)
       event.currentTarget.setPointerCapture(event.pointerId)
-    pointers.current.set(event.pointerId, {
+    const point = {
       x: event.clientX,
       y: event.clientY
-    })
+    }
+    if (pointers.current.size === 0) {
+      gesture.current = {
+        origins: new Map([[event.pointerId, point]]),
+        moved: false,
+        multi: false
+      }
+    } else {
+      gesture.current?.origins.set(event.pointerId, point)
+      if (gesture.current) gesture.current.multi = true
+      lastTap.current = null
+    }
+    pointers.current.set(event.pointerId, point)
   }
 
   const onPointerMove = (event: React.PointerEvent) => {
@@ -245,6 +265,14 @@ export const SoundscapeImage = forwardRef<
     if (!previous || showBlackout) return
     const allBefore = [...pointers.current.values()]
     const next = { x: event.clientX, y: event.clientY }
+    const origin = gesture.current?.origins.get(event.pointerId)
+    if (
+      origin &&
+      Math.hypot(next.x - origin.x, next.y - origin.y) > TAP_MOVE_THRESHOLD
+    ) {
+      if (gesture.current) gesture.current.moved = true
+      lastTap.current = null
+    }
     pointers.current.set(event.pointerId, next)
     if (pointers.current.size === 1 && viewRef.current.scale > 1) {
       const current = viewRef.current
@@ -261,7 +289,9 @@ export const SoundscapeImage = forwardRef<
       const newDistance = Math.hypot(c.x - d.x, c.y - d.y)
       const oldMid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
       const newMid = { x: (c.x + d.x) / 2, y: (c.y + d.y) / 2 }
-      zoomAt(viewRef.current.scale * (newDistance / oldDistance), oldMid)
+      if (oldDistance > 1 && Number.isFinite(newDistance)) {
+        zoomAt(viewRef.current.scale * (newDistance / oldDistance), oldMid)
+      }
       const current = viewRef.current
       updateView({
         ...current,
@@ -273,12 +303,17 @@ export const SoundscapeImage = forwardRef<
 
   const removePointer = (event: React.PointerEvent) => {
     const wasOnlyPointer = pointers.current.size === 1
+    const completedGesture = gesture.current
     pointers.current.delete(event.pointerId)
+    if (pointers.current.size === 0) gesture.current = null
     if (
       showBlackout ||
       event.type !== 'pointerup' ||
       event.pointerType !== 'touch' ||
-      !wasOnlyPointer
+      !wasOnlyPointer ||
+      !completedGesture ||
+      completedGesture.moved ||
+      completedGesture.multi
     )
       return
     const tap = { x: event.clientX, y: event.clientY, time: event.timeStamp }
