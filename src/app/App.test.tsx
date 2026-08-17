@@ -470,9 +470,7 @@ describe('App', () => {
     await user.click(viewer.querySelector('img')!)
     expect(
       screen.queryByRole('dialog', { name: /Soundscape image viewer/ })
-    ).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Theater mode' }))
+    ).toBeInTheDocument()
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(
       screen.queryByRole('dialog', { name: /Soundscape image viewer/ })
@@ -480,6 +478,26 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: 'Remove' }))
     expect(screen.queryByText('forest.jpg')).not.toBeInTheDocument()
+  })
+
+  it('zooms the image without rendering viewer controls', async () => {
+    const user = userEvent.setup()
+    render(<App engine={createMockEngine()} />)
+    await user.upload(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      imageFile('forest.jpg')
+    )
+    await user.click(screen.getByRole('button', { name: 'Theater mode' }))
+    const viewer = screen.getByRole('dialog', { name: /Pinch.*browser Back/i })
+    const displayedImage = viewer.querySelector('img')!
+
+    fireEvent.doubleClick(displayedImage, { clientX: 100, clientY: 100 })
+    expect(displayedImage.style.transform).toContain('scale(2)')
+    fireEvent.keyDown(document, { key: '0' })
+    expect(displayedImage.style.transform).toContain('scale(1)')
+    fireEvent.wheel(viewer, { clientX: 100, clientY: 100, deltaY: -200 })
+    expect(displayedImage.style.transform).not.toContain('scale(1)')
+    expect(viewer.querySelectorAll('button')).toHaveLength(0)
   })
 
   it('sorts audio and image files selected through the same upload control', async () => {
