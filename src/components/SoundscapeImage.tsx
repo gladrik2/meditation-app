@@ -47,6 +47,7 @@ export const SoundscapeImage = forwardRef<
   const gesture = useRef<Gesture | null>(null)
   const lastTap = useRef<(Point & { time: number }) | null>(null)
   const suppressDoubleClickUntil = useRef(0)
+  const closingViewer = useRef(false)
   const viewRef = useRef(view)
   viewRef.current = view
 
@@ -131,18 +132,41 @@ export const SoundscapeImage = forwardRef<
   }, [fit, updateView])
 
   const closeViewer = useCallback(
-    async (consumeHistory = true) => {
-      if (document.fullscreenElement && document.exitFullscreen) {
-        await document.exitFullscreen()
+    async (consumeHistory = true, exitNativeFullscreen = true) => {
+      if (closingViewer.current) return
+      closingViewer.current = true
+      if (
+        exitNativeFullscreen &&
+        document.fullscreenElement &&
+        document.exitFullscreen
+      ) {
+        try {
+          await document.exitFullscreen()
+        } catch {
+          // Continue closing if the browser has already left fullscreen.
+        }
       }
       setIsTheater(false)
       setShowBlackout(false)
       resetView()
       if (consumeHistory && historyEntry.current) history.back()
       historyEntry.current = false
+      enteredFullscreen.current = false
+      closingViewer.current = false
     },
     [resetView]
   )
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      if (enteredFullscreen.current && !document.fullscreenElement) {
+        void closeViewer(false, false)
+      }
+    }
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+    return () =>
+      document.removeEventListener('fullscreenchange', onFullscreenChange)
+  }, [closeViewer])
 
   useEffect(() => {
     if (!isTheater) return
@@ -172,41 +196,41 @@ export const SoundscapeImage = forwardRef<
         }
       }
     }
-    const onFullscreenChange = () => {
-      if (enteredFullscreen.current && !document.fullscreenElement) {
-        enteredFullscreen.current = false
-        void closeViewer()
-      }
-    }
     window.addEventListener('popstate', onPopState)
     document.addEventListener('keydown', onKeyDown)
-    document.addEventListener('fullscreenchange', onFullscreenChange)
     return () => {
       window.removeEventListener('popstate', onPopState)
       document.removeEventListener('keydown', onKeyDown)
-      document.removeEventListener('fullscreenchange', onFullscreenChange)
     }
   }, [closeViewer, isTheater, resetView, showBlackout, updateView])
 
-  const openViewer = () => {
-    resetView()
+  const pushViewerHistory = () => {
     if (!historyEntry.current) {
       history.pushState({ imageViewer: true }, '')
       historyEntry.current = true
     }
+  }
+
+  const openTheater = () => {
+    resetView()
+    pushViewerHistory()
     setIsTheater(true)
   }
 
-  const openTheater = () => openViewer()
-
   const enterFullscreen = async () => {
-    flushSync(openViewer)
+    resetView()
+    flushSync(() => setIsTheater(true))
     const request = viewerRef.current?.requestFullscreen
-    if (!request) return
+    if (!request) {
+      pushViewerHistory()
+      return
+    }
+    enteredFullscreen.current = true
     try {
       await request.call(viewerRef.current)
-      enteredFullscreen.current = true
     } catch {
+      enteredFullscreen.current = false
+      pushViewerHistory()
       // Theater mode remains available when fullscreen is denied.
     }
   }
