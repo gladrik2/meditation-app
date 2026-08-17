@@ -14,6 +14,7 @@ const manifest = (): SoundscapeManifest => ({
   name: 'Landscape',
   updatedAt: '2026-08-14T00:00:00.000Z',
   masterVolume: 1,
+  timerSettings: { mode: 'stopwatch', minutes: 10, startMedia: true },
   tracks: [
     {
       name: 'rain.opus',

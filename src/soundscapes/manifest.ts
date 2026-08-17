@@ -1,6 +1,18 @@
 export const SOUNDSCAPE_MANIFEST_VERSION = 1 as const
 export const SOUNDSCAPE_NAME_MAX_LENGTH = 80
 
+export interface MeditationTimerSettings {
+  mode: 'stopwatch' | 'countdown'
+  minutes: number
+  startMedia: boolean
+}
+
+export const DEFAULT_MEDITATION_TIMER_SETTINGS: MeditationTimerSettings = {
+  mode: 'stopwatch',
+  minutes: 10,
+  startMedia: true
+}
+
 export function validateSoundscapeName(value: string) {
   if (/\p{Cc}/u.test(value))
     throw new Error('Soundscape names cannot contain control characters.')
@@ -40,6 +52,7 @@ export interface SoundscapeManifest {
   name: string
   updatedAt: string
   masterVolume: number
+  timerSettings: MeditationTimerSettings
   image?: ManifestMedia
   tracks: ManifestTrack[]
 }
@@ -62,6 +75,10 @@ export function parseSoundscapeManifest(value: unknown): SoundscapeManifest {
     value.version === undefined
       ? { ...value, version: 1, masterVolume: value.masterVolume ?? 1 }
       : value
+  const timerSettings =
+    migrated.timerSettings === undefined
+      ? { ...DEFAULT_MEDITATION_TIMER_SETTINGS }
+      : migrated.timerSettings
   if (
     migrated.version !== SOUNDSCAPE_MANIFEST_VERSION ||
     typeof migrated.id !== 'string' ||
@@ -71,6 +88,18 @@ export function parseSoundscapeManifest(value: unknown): SoundscapeManifest {
     !Array.isArray(migrated.tracks)
   )
     throw new Error('The soundscape manifest is invalid or unsupported.')
+
+  if (
+    !isRecord(timerSettings) ||
+    (timerSettings.mode !== 'stopwatch' &&
+      timerSettings.mode !== 'countdown') ||
+    typeof timerSettings.minutes !== 'number' ||
+    !Number.isFinite(timerSettings.minutes) ||
+    !Number.isInteger(timerSettings.minutes) ||
+    timerSettings.minutes < 1 ||
+    typeof timerSettings.startMedia !== 'boolean'
+  )
+    throw new Error('The soundscape manifest contains invalid timer settings.')
 
   const validateMedia = (media: unknown): media is ManifestMedia =>
     isRecord(media) &&
@@ -90,5 +119,5 @@ export function parseSoundscapeManifest(value: unknown): SoundscapeManifest {
   })
   if (!tracksValid || (migrated.image && !validateMedia(migrated.image)))
     throw new Error('The soundscape manifest contains invalid media metadata.')
-  return migrated as unknown as SoundscapeManifest
+  return { ...migrated, timerSettings } as unknown as SoundscapeManifest
 }

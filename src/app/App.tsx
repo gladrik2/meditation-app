@@ -17,8 +17,10 @@ import {
 import { LocalSoundscapeStore } from '../soundscapes/localSoundscapes'
 import {
   SOUNDSCAPE_MANIFEST_VERSION,
+  DEFAULT_MEDITATION_TIMER_SETTINGS,
   nextSoundscapeName,
   validateSoundscapeName,
+  type MeditationTimerSettings,
   type SoundscapeManifest
 } from '../soundscapes/manifest'
 import {
@@ -47,6 +49,10 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
     SoundscapeManifest[]
   >([])
   const [saveMessage, setSaveMessage] = useState<string>()
+  const [timerSettings, setTimerSettings] = useState<MeditationTimerSettings>(
+    () => ({ ...DEFAULT_MEDITATION_TIMER_SETTINGS })
+  )
+  const [timerSessionKey, setTimerSessionKey] = useState(0)
   const localStore = useMemo(() => new LocalSoundscapeStore(), [])
   const controls = useTracks(engine)
   const ready = controls.tracks.some((track) => track.status === 'ready')
@@ -79,6 +85,8 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
   ) => {
     if (!restored) return
     const { manifest, files } = restored
+    setTimerSessionKey((key) => key + 1)
+    setTimerSettings({ ...manifest.timerSettings })
     const trackFiles = manifest.tracks.map((track) =>
       files.get(track.reference.localPath)
     )
@@ -178,6 +186,7 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
       name,
       updatedAt: new Date().toISOString(),
       masterVolume: controls.masterVolume,
+      timerSettings: { ...timerSettings },
       image: manifestImage,
       tracks
     }
@@ -472,6 +481,9 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
             }}
           />
           <MeditationTimer
+            key={timerSessionKey}
+            settings={timerSettings}
+            onSettingsChange={setTimerSettings}
             onStart={() => {
               void engine.prepareCompletionGong().catch((error: unknown) => {
                 console.error('Failed to prepare the completion gong.', error)

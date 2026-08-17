@@ -68,6 +68,7 @@ const manifest: SoundscapeManifest = {
   name: 'Offline',
   updatedAt: '2026-08-14T00:00:00.000Z',
   masterVolume: 0.5,
+  timerSettings: { mode: 'stopwatch', minutes: 10, startMedia: true },
   tracks: [
     {
       name: 'rain.opus',

@@ -62,6 +62,7 @@ describe('App', () => {
       name: 'Soundscape 2',
       updatedAt: '2026-08-16T00:00:00.000Z',
       masterVolume: 1,
+      timerSettings: { mode: 'stopwatch', minutes: 10, startMedia: true },
       tracks: []
     }
     driveOperations.importSoundscape.mockResolvedValue({
@@ -213,6 +214,7 @@ describe('App', () => {
       name,
       updatedAt: '2026-08-16T00:00:00.000Z',
       masterVolume: 1,
+      timerSettings: { mode: 'stopwatch', minutes: 10, startMedia: true },
       tracks: []
     })
     const first = saved('first-id', 'Soundscape 1')
@@ -258,6 +260,7 @@ describe('App', () => {
       name,
       updatedAt: '2026-08-16T00:00:00.000Z',
       masterVolume: 1,
+      timerSettings: { mode: 'stopwatch', minutes: 10, startMedia: true },
       tracks: []
     })
     let records = [
@@ -324,6 +327,7 @@ describe('App', () => {
       name: 'Saved scene',
       updatedAt: '2026-08-16T00:00:00.000Z',
       masterVolume: 0.6,
+      timerSettings: { mode: 'stopwatch', minutes: 10, startMedia: true },
       image: {
         name: 'forest.jpg',
         mimeType: 'image/jpeg',
@@ -376,6 +380,7 @@ describe('App', () => {
       name: 'Drive import',
       updatedAt: '2026-08-16T00:00:00.000Z',
       masterVolume: 1,
+      timerSettings: { mode: 'stopwatch', minutes: 10, startMedia: true },
       image: {
         name: 'forest.jpg',
         mimeType: 'image/jpeg',
@@ -778,6 +783,11 @@ describe('App', () => {
       { target: { files: [audioFile('rain.wav')] } }
     )
     await act(async () => {})
+    fireEvent.click(
+      screen.getByLabelText(
+        'Play all audio and full screen the image when meditation starts'
+      )
+    )
 
     const start = screen.getByRole('button', { name: /Start Meditation/ })
     fireEvent.click(start)
@@ -806,6 +816,11 @@ describe('App', () => {
       { target: { files: [audioFile('rain.wav')] } }
     )
     await act(async () => {})
+    fireEvent.click(
+      screen.getByLabelText(
+        'Play all audio and full screen the image when meditation starts'
+      )
+    )
 
     fireEvent.change(screen.getByLabelText('Timer type'), {
       target: { value: 'countdown' }
@@ -906,11 +921,11 @@ describe('App', () => {
       [audioFile('rain.wav'), imageFile('forest.jpg')]
     )
 
-    await user.click(
+    expect(
       screen.getByLabelText(
         'Play all audio and full screen the image when meditation starts'
       )
-    )
+    ).toBeChecked()
     await user.click(screen.getByRole('button', { name: /Start Meditation/ }))
 
     expect(engine.playAll).toHaveBeenCalledWith(['track-0'])
