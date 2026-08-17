@@ -548,6 +548,8 @@ describe('App', () => {
     touch('pointerDown', 1, 200, 200)
     touch('pointerUp', 1, 200, 200)
     expect(displayedImage.style.transform).toContain('scale(2)')
+    fireEvent.doubleClick(viewer, { clientX: 200, clientY: 200 })
+    expect(displayedImage.style.transform).toContain('scale(2)')
     touch('pointerDown', 1, 200, 200)
     touch('pointerUp', 1, 200, 200)
     expect(displayedImage.style.transform).toContain('scale(2)')

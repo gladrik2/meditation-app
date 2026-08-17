@@ -46,6 +46,7 @@ export const SoundscapeImage = forwardRef<
   const pointers = useRef(new Map<number, Point>())
   const gesture = useRef<Gesture | null>(null)
   const lastTap = useRef<(Point & { time: number }) | null>(null)
+  const suppressDoubleClickUntil = useRef(0)
   const viewRef = useRef(view)
   viewRef.current = view
 
@@ -78,6 +79,7 @@ export const SoundscapeImage = forwardRef<
     pointers.current.clear()
     gesture.current = null
     lastTap.current = null
+    suppressDoubleClickUntil.current = 0
     viewRef.current = FIT_VIEW
     setView(FIT_VIEW)
   }, [])
@@ -323,6 +325,7 @@ export const SoundscapeImage = forwardRef<
       tap.time - previous.time < 350 &&
       Math.hypot(tap.x - previous.x, tap.y - previous.y) < 30
     ) {
+      suppressDoubleClickUntil.current = event.timeStamp + 500
       zoomAt(viewRef.current.scale === 1 ? 2 : 1, tap)
       lastTap.current = null
     } else lastTap.current = tap
@@ -391,11 +394,14 @@ export const SoundscapeImage = forwardRef<
           onDoubleClick={
             showBlackout
               ? undefined
-              : (event) =>
+              : (event) => {
+                  if (event.timeStamp <= suppressDoubleClickUntil.current)
+                    return
                   zoomAt(viewRef.current.scale === 1 ? 2 : 1, {
                     x: event.clientX,
                     y: event.clientY
                   })
+                }
           }
           onWheel={
             showBlackout
