@@ -4,6 +4,33 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createMockEngine } from '../test/mockEngine'
 import { AudioEngineLoadError } from '../audio/types'
 import { App } from './App'
+import { LocalSoundscapeStore } from '../soundscapes/localSoundscapes'
+import type { SoundscapeManifest } from '../soundscapes/manifest'
+import type { GoogleDriveAuth } from '../googleDrive/googleDriveAuth'
+
+const driveOperations = vi.hoisted(() => ({
+  importSoundscape: vi.fn(),
+  publishSoundscape: vi.fn()
+}))
+
+vi.mock('../googleDrive/googleDriveSoundscapes', () => ({
+  importDriveSoundscape: driveOperations.importSoundscape,
+  publishSoundscape: driveOperations.publishSoundscape
+}))
+
+vi.mock('@googleworkspace/drive-picker-react', () => ({
+  DrivePicker: ({ onPicked }: { onPicked(event: object): void }) => (
+    <button
+      type="button"
+      onClick={() =>
+        onPicked({ detail: { docs: [{ id: 'drive-manifest-id' }] } })
+      }
+    >
+      Pick saved Drive soundscape
+    </button>
+  ),
+  DrivePickerDocsView: () => null
+}))
 
 const audioFile = (name: string) =>
   new File(['not-real-audio'], name, { type: 'audio/wav' })
@@ -14,14 +41,397 @@ describe('App', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.restoreAllMocks()
+    driveOperations.importSoundscape.mockReset()
+    driveOperations.publishSoundscape.mockReset()
   })
 
   it('shows the private empty state initially', () => {
     render(<App engine={createMockEngine()} />)
     expect(screen.getByText('Your soundscape is empty')).toBeInTheDocument()
     expect(
-      screen.getAllByText(/local files are never uploaded by this app/i)
-    ).toHaveLength(2)
+      screen.getByText(/unless you explicitly export.*Google Drive/i)
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Unsaved files are forgotten/i)).toBeInTheDocument()
+  })
+
+  it('adds a Drive import to Saved soundscapes immediately', async () => {
+    const user = userEvent.setup()
+    const imported: SoundscapeManifest = {
+      version: 1,
+      id: 'imported-id',
+      name: 'Soundscape 2',
+      updatedAt: '2026-08-16T00:00:00.000Z',
+      masterVolume: 1,
+      tracks: []
+    }
+    driveOperations.importSoundscape.mockResolvedValue({
+      manifest: imported,
+      files: new Map()
+    })
+    vi.spyOn(LocalSoundscapeStore.prototype, 'list')
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([imported])
+    const driveAuth: GoogleDriveAuth = {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      getAccessToken: vi.fn().mockReturnValue('token'),
+      isConnected: vi.fn().mockReturnValue(true)
+    }
+    render(<App engine={createMockEngine()} driveAuth={driveAuth} />)
+
+    await user.click(screen.getByRole('button', { name: 'Add files' }))
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Import soundscape from Google Drive'
+      })
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Pick saved Drive soundscape' })
+    )
+
+    expect(
+      await screen.findByRole('button', { name: 'Open Soundscape 2' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Restored “Soundscape 2” from Google Drive.')
+    ).toBeInTheDocument()
+  })
+
+  it('exports duplicate names with distinct manifest IDs', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(LocalSoundscapeStore.prototype, 'list').mockResolvedValue([])
+    const localSave = vi
+      .spyOn(LocalSoundscapeStore.prototype, 'save')
+      .mockResolvedValue(undefined)
+    vi.spyOn(window, 'prompt').mockReturnValue('Shared calm')
+    vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce('00000000-0000-4000-8000-000000000011')
+      .mockReturnValueOnce('00000000-0000-4000-8000-000000000012')
+    driveOperations.publishSoundscape.mockResolvedValue('folder-id')
+    const driveAuth: GoogleDriveAuth = {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      getAccessToken: vi.fn().mockReturnValue('token'),
+      isConnected: vi.fn().mockReturnValue(true)
+    }
+    render(<App engine={createMockEngine()} driveAuth={driveAuth} />)
+    const newCopy = screen.getByRole('button', {
+      name: 'Export soundscape to Google Drive'
+    })
+
+    await user.click(newCopy)
+    await user.click(newCopy)
+
+    await waitFor(() =>
+      expect(driveOperations.publishSoundscape).toHaveBeenCalledTimes(2)
+    )
+    const published = driveOperations.publishSoundscape.mock.calls.map(
+      ([manifest]) => manifest as SoundscapeManifest
+    )
+    expect(published.map(({ name }) => name)).toEqual([
+      'Shared calm',
+      'Shared calm'
+    ])
+    expect(new Set(published.map(({ id }) => id)).size).toBe(2)
+    expect(localSave).toHaveBeenCalledTimes(2)
+    expect(
+      new Set(localSave.mock.calls.map(([manifest]) => manifest.id)).size
+    ).toBe(2)
+    expect(
+      screen.getByText('Exported “Shared calm” to Google Drive.')
+    ).toBeInTheDocument()
+  })
+
+  it('suggests the first unused numbered name when saving', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(LocalSoundscapeStore.prototype, 'list').mockResolvedValue([
+      { name: 'Soundscape 1' },
+      { name: 'soundscape 2' }
+    ] as SoundscapeManifest[])
+    const prompt = vi.spyOn(window, 'prompt').mockReturnValue(null)
+    render(<App engine={createMockEngine()} />)
+
+    await user.click(
+      screen.getByRole('button', { name: 'Save on this device' })
+    )
+
+    await waitFor(() =>
+      expect(prompt).toHaveBeenCalledWith('Soundscape name', 'Soundscape 3')
+    )
+  })
+
+  it('preserves identity for Save changes and creates a new ID for Save as', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(LocalSoundscapeStore.prototype, 'list').mockResolvedValue([])
+    vi.spyOn(
+      LocalSoundscapeStore.prototype,
+      'requestPersistence'
+    ).mockResolvedValue(false)
+    const save = vi
+      .spyOn(LocalSoundscapeStore.prototype, 'save')
+      .mockResolvedValue(undefined)
+    vi.spyOn(window, 'prompt')
+      .mockReturnValueOnce('Morning')
+      .mockReturnValueOnce('Evening')
+    vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce('00000000-0000-4000-8000-000000000001')
+      .mockReturnValueOnce('00000000-0000-4000-8000-000000000002')
+    render(<App engine={createMockEngine()} />)
+
+    await user.click(
+      screen.getByRole('button', { name: 'Save on this device' })
+    )
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+    expect(save.mock.calls[0][0]).toMatchObject({
+      id: '00000000-0000-4000-8000-000000000001',
+      name: 'Morning'
+    })
+    expect(screen.getByText(/Current soundscape:/)).toHaveTextContent('Morning')
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
+    expect(save.mock.calls[1][0]).toMatchObject({
+      id: '00000000-0000-4000-8000-000000000001',
+      name: 'Morning'
+    })
+
+    await user.click(
+      screen.getByRole('button', { name: 'Save as new soundscape' })
+    )
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(3))
+    expect(save.mock.calls[2][0]).toMatchObject({
+      id: '00000000-0000-4000-8000-000000000002',
+      name: 'Evening'
+    })
+  })
+
+  it('lists saved soundscapes and opens or deletes them independently', async () => {
+    const user = userEvent.setup()
+    const saved = (id: string, name: string): SoundscapeManifest => ({
+      version: 1,
+      id,
+      name,
+      updatedAt: '2026-08-16T00:00:00.000Z',
+      masterVolume: 1,
+      tracks: []
+    })
+    const first = saved('first-id', 'Soundscape 1')
+    const second = saved('second-id', 'Soundscape 2')
+    vi.spyOn(LocalSoundscapeStore.prototype, 'list')
+      .mockResolvedValueOnce([first, second])
+      .mockResolvedValue([first])
+    vi.spyOn(LocalSoundscapeStore.prototype, 'restore').mockResolvedValue({
+      manifest: first,
+      files: new Map()
+    })
+    const remove = vi
+      .spyOn(LocalSoundscapeStore.prototype, 'delete')
+      .mockResolvedValue(undefined)
+    render(<App engine={createMockEngine()} />)
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Open Soundscape 1' })
+    )
+    expect(screen.getByText(/Current soundscape:/)).toHaveTextContent(
+      'Soundscape 1'
+    )
+
+    await user.click(
+      screen.getByRole('button', { name: 'Delete local copy Soundscape 2' })
+    )
+    expect(remove).toHaveBeenCalledWith('second-id')
+    expect(
+      await screen.findByText(
+        'Deleted the local saved soundscape and its cached media.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Current soundscape:/)).toHaveTextContent(
+      'Soundscape 1'
+    )
+  })
+
+  it('renames current and non-current saved soundscapes independently', async () => {
+    const user = userEvent.setup()
+    const saved = (id: string, name: string): SoundscapeManifest => ({
+      version: 1,
+      id,
+      name,
+      updatedAt: '2026-08-16T00:00:00.000Z',
+      masterVolume: 1,
+      tracks: []
+    })
+    let records = [
+      saved('first-id', 'Soundscape 1'),
+      saved('second-id', 'Soundscape 2')
+    ]
+    vi.spyOn(LocalSoundscapeStore.prototype, 'list').mockImplementation(
+      async () => structuredClone(records)
+    )
+    vi.spyOn(LocalSoundscapeStore.prototype, 'restore').mockImplementation(
+      async (id) => ({
+        manifest: structuredClone(records.find((record) => record.id === id)!),
+        files: new Map()
+      })
+    )
+    vi.spyOn(LocalSoundscapeStore.prototype, 'rename').mockImplementation(
+      async (id, name) => {
+        records = records.map((record) =>
+          record.id === id ? { ...record, name } : record
+        )
+        return structuredClone(records.find((record) => record.id === id)!)
+      }
+    )
+    const prompt = vi
+      .spyOn(window, 'prompt')
+      .mockReturnValueOnce('Background calm')
+      .mockReturnValueOnce('Morning calm')
+    render(<App engine={createMockEngine()} />)
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Open Soundscape 1' })
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Rename Soundscape 2' })
+    )
+    expect(
+      await screen.findByRole('button', { name: 'Open Background calm' })
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Current soundscape:/)).toHaveTextContent(
+      'Soundscape 1'
+    )
+
+    await user.click(
+      screen.getByRole('button', { name: 'Rename Soundscape 1' })
+    )
+    expect(screen.getByText(/Current soundscape:/)).toHaveTextContent(
+      'Morning calm'
+    )
+    expect(prompt).toHaveBeenNthCalledWith(
+      1,
+      'Rename soundscape',
+      'Soundscape 2'
+    )
+  })
+
+  it('continues restoring later tracks and the image when one saved track fails', async () => {
+    const engine = createMockEngine()
+    vi.mocked(engine.loadTrack)
+      .mockRejectedValueOnce(new Error('broken saved file'))
+      .mockResolvedValueOnce(120)
+    const manifest: SoundscapeManifest = {
+      version: 1,
+      id: 'saved-id',
+      name: 'Saved scene',
+      updatedAt: '2026-08-16T00:00:00.000Z',
+      masterVolume: 0.6,
+      image: {
+        name: 'forest.jpg',
+        mimeType: 'image/jpeg',
+        size: 5,
+        reference: { localPath: 'image.media' }
+      },
+      tracks: ['broken.wav', 'rain.wav'].map((name, index) => ({
+        name,
+        mimeType: 'audio/wav',
+        size: 5,
+        volume: 0.5,
+        isSoundEffect: false,
+        effectChance: 50,
+        reference: { localPath: `track-${index}.media` }
+      }))
+    }
+    vi.spyOn(LocalSoundscapeStore.prototype, 'restoreLast').mockResolvedValue({
+      manifest,
+      files: new Map([
+        [
+          'track-0.media',
+          new File(['bad'], 'broken.wav', { type: 'audio/wav' })
+        ],
+        [
+          'track-1.media',
+          new File(['rain'], 'rain.wav', { type: 'audio/wav' })
+        ],
+        [
+          'image.media',
+          new File(['image'], 'forest.jpg', { type: 'image/jpeg' })
+        ]
+      ])
+    })
+
+    render(<App engine={engine} />)
+
+    expect(
+      await screen.findByText('This audio file could not be read or decoded.')
+    ).toBeInTheDocument()
+    expect(await screen.findByText('rain.wav')).toBeInTheDocument()
+    expect(await screen.findByText('forest.jpg')).toBeInTheDocument()
+    expect(engine.loadTrack).toHaveBeenCalledTimes(2)
+  })
+
+  it('reuses restored OPFS paths when saving changes repeatedly', async () => {
+    const user = userEvent.setup()
+    const manifest: SoundscapeManifest = {
+      version: 1,
+      id: 'drive-cache-id',
+      name: 'Drive import',
+      updatedAt: '2026-08-16T00:00:00.000Z',
+      masterVolume: 1,
+      image: {
+        name: 'forest.jpg',
+        mimeType: 'image/jpeg',
+        size: 5,
+        reference: { localPath: 'cached-image.media' }
+      },
+      tracks: [
+        {
+          name: 'rain.wav',
+          mimeType: 'audio/wav',
+          size: 5,
+          volume: 1,
+          isSoundEffect: false,
+          effectChance: 50,
+          reference: {
+            localPath: 'cached-rain.media',
+            driveFileId: 'drive-rain'
+          }
+        }
+      ]
+    }
+    vi.spyOn(LocalSoundscapeStore.prototype, 'restoreLast').mockResolvedValue({
+      manifest,
+      files: new Map([
+        [
+          'cached-rain.media',
+          new File(['rain'], 'rain.wav', { type: 'audio/wav' })
+        ],
+        [
+          'cached-image.media',
+          new File(['image'], 'forest.jpg', { type: 'image/jpeg' })
+        ]
+      ])
+    })
+    vi.spyOn(LocalSoundscapeStore.prototype, 'list').mockResolvedValue([
+      manifest
+    ])
+    const save = vi
+      .spyOn(LocalSoundscapeStore.prototype, 'save')
+      .mockResolvedValue(undefined)
+    render(<App engine={createMockEngine()} />)
+    await screen.findByText('rain.wav')
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(save).toHaveBeenCalledTimes(2)
+    for (const [savedManifest, newFiles] of save.mock.calls) {
+      expect(savedManifest.tracks[0].reference.localPath).toBe(
+        'cached-rain.media'
+      )
+      expect(savedManifest.image?.reference.localPath).toBe(
+        'cached-image.media'
+      )
+      expect(newFiles.size).toBe(0)
+    }
   })
 
   it('loads multiple selected audio files and removes a track', async () => {

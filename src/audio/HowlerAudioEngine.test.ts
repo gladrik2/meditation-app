@@ -115,6 +115,30 @@ describe('HowlerAudioEngine', () => {
     expect(howl.volume).not.toHaveBeenCalledWith(0.2, expect.anything())
   })
 
+  it('ignores internal storage suffixes and uses the audio MIME format', async () => {
+    const { howl } = await finishLoad(
+      120,
+      'track-0-meditation.wav.random.media'
+    )
+
+    expect(howl.options.format).toEqual(['ogg'])
+  })
+
+  it('times out a track that never finishes metadata loading', async () => {
+    vi.useFakeTimers()
+    const engine = new HowlerAudioEngine()
+    const loading = engine.loadTrack(
+      'stuck-track',
+      new File(['bad'], 'broken.wav', { type: 'audio/wav' })
+    )
+    const timedOut = expect(loading).rejects.toThrow(/too long to load/i)
+
+    await vi.advanceTimersByTimeAsync(15_000)
+
+    await timedOut
+    vi.useRealTimers()
+  })
+
   it('uses normal Howler Web Audio playback for short effects and the gong', async () => {
     const { engine, howl } = await finishLoad(4)
     expect(howl.options.html5).toBe(false)
@@ -169,6 +193,32 @@ describe('HowlerAudioEngine', () => {
     expect(howl.play).toHaveBeenNthCalledWith(2, 1)
     expect(howl.volume).toHaveBeenCalledWith(0, 1)
     expect(howl.fade).toHaveBeenCalledWith(0, 0.2, 20, 1)
+  })
+
+  it('leaves an already-playing track unchanged when played again', async () => {
+    const { engine, howl } = await finishLoad(30)
+    const firstPlay = engine.play('track')
+    howl.playing.mockReturnValue(true)
+    howl.fire('play', 1)
+    await firstPlay
+    howl.play.mockClear()
+    howl.volume.mockClear()
+
+    void engine.playAll(['track'])
+
+    expect(howl.play).not.toHaveBeenCalled()
+    expect(howl.volume).not.toHaveBeenCalled()
+  })
+
+  it('coalesces repeated play requests while playback is starting', async () => {
+    const { engine, howl } = await finishLoad(30)
+
+    const firstPlay = engine.playAll(['track'])
+    const secondPlay = engine.playAll(['track'])
+
+    expect(howl.play).toHaveBeenCalledOnce()
+    howl.fire('play', 1)
+    await Promise.all([firstPlay, secondPlay])
   })
 
   it('keeps a looping long track controllable after an end event', async () => {

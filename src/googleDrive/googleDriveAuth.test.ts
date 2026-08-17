@@ -58,7 +58,7 @@ describe('BrowserGoogleDriveAuth', () => {
 
     google.respond({ access_token: 'partial-token', expires_in: 60 })
 
-    await expect(connection).rejects.toThrow(/both requested scopes/i)
+    await expect(connection).rejects.toThrow(/requires permission/i)
     expect(auth.getAccessToken()).toBeUndefined()
     expect(auth.isConnected()).toBe(false)
   })

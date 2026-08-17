@@ -19,7 +19,7 @@ React, strict TypeScript, Vite, the Web Audio API, `vite-plugin-pwa`, Vitest, Re
 
 ## Privacy model
 
-Audio and the optional soundscape image are read through standard browser APIs and held locally in memory. Howler.js uses its shared Web Audio context for short effects and streaming HTML5 Audio for long tracks. Files, file contents, and filenames are not uploaded, sent to analytics, or added to service-worker caches. Selected files are forgotten on refresh or close.
+Audio and the optional soundscape image are processed locally. Unsaved selections remain in memory and are forgotten on refresh or close. When you choose **Save on this device**, media is streamed into the browser's private Origin Private File System and manifest metadata is stored in IndexedDB so the last saved soundscape works offline. When you explicitly choose **Export soundscape to Google Drive**, the app creates a visible Drive folder and uploads the soundscape media plus a named `.soundscape.json` manifest directly to your Drive; the app has no server copy. Soundscapes imported from Drive are cached in private browser storage for offline playback. Files, contents, and filenames are never sent to analytics or added to service-worker caches. You can delete a locally saved soundscape and its local cache at any time.
 
 ## Development
 
@@ -69,6 +69,7 @@ After merging to `main`, a repository administrator must open **Settings → Pag
 - Tracks are held in memory, so very large or numerous files may exceed mobile memory limits.
 - Pause positions are tracked by the audio clock; tracks that naturally reach their end reset to the beginning.
 - File access is intentionally not persisted between sessions.
+- Google Drive uploads restart from the beginning if interrupted; chunked upload resumption is not implemented yet.
 - The first playback gesture may be needed to resume audio due to browser autoplay policies.
 - Advanced mixing, waveform rendering, effects, panning, looping, and persistent libraries are not yet implemented.
 

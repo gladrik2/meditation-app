@@ -12,6 +12,7 @@ interface EngineTrack {
   url: string
   volume: number
   soundId?: number
+  playPromise?: Promise<void>
 }
 
 interface PendingTrack {
@@ -22,14 +23,28 @@ interface PendingTrack {
 
 const SOUND_EFFECT_MAX_SECONDS = 10
 const STARTUP_FADE_MS = 20
+const LOAD_TIMEOUT_MS = 15_000
+const AUDIO_FORMATS = new Set([
+  'opus',
+  'ogg',
+  'webm',
+  'mp3',
+  'm4a',
+  'aac',
+  'wav',
+  'flac'
+])
 const clampVolume = (value: number) => Math.min(1, Math.max(0, value))
 const completionGongUrl = `${import.meta.env.BASE_URL}audio/built-in/gong.ogg`
 
 const fileFormat = (file: File): string | undefined => {
   const extension = file.name.toLowerCase().match(/\.([^.]+)$/)?.[1]
-  if (extension) return extension === 'oga' ? 'ogg' : extension
+  const normalizedExtension = extension === 'oga' ? 'ogg' : extension
+  if (normalizedExtension && AUDIO_FORMATS.has(normalizedExtension))
+    return normalizedExtension
   const subtype = file.type.toLowerCase().split(';', 1)[0].split('/')[1]
-  return subtype?.replace('x-', '')
+  const mimeFormat = subtype?.replace('x-', '')
+  return mimeFormat && AUDIO_FORMATS.has(mimeFormat) ? mimeFormat : undefined
 }
 
 /** Howler-backed audio engine. Long tracks stream through HTML5 Audio while
@@ -66,6 +81,14 @@ export class HowlerAudioEngine implements AudioEngine {
     return new Promise<number>((resolve, reject) => {
       let settled = false
       let activeHowl: Howl | null = null
+      const loadTimeout = window.setTimeout(
+        () =>
+          fail(
+            'metadata-read-failure',
+            'The audio file took too long to load.'
+          ),
+        LOAD_TIMEOUT_MS
+      )
       const cleanUpProbe = () => {
         element.removeEventListener('loadedmetadata', onMetadata)
         element.removeEventListener('durationchange', onMetadata)
@@ -77,6 +100,7 @@ export class HowlerAudioEngine implements AudioEngine {
       const fail = (category: AudioLoadErrorCategory, message: string) => {
         if (settled) return
         settled = true
+        window.clearTimeout(loadTimeout)
         cleanUpProbe()
         if (this.pendingTracks.get(id)?.element === element)
           this.pendingTracks.delete(id)
@@ -133,6 +157,7 @@ export class HowlerAudioEngine implements AudioEngine {
         const onLoad = () => {
           if (settled) return
           settled = true
+          window.clearTimeout(loadTimeout)
           this.pendingTracks.delete(id)
           this.tracks.set(id, track)
           resolve(duration)
@@ -160,7 +185,10 @@ export class HowlerAudioEngine implements AudioEngine {
   async play(id: TrackId): Promise<void> {
     const track = this.tracks.get(id)
     if (!track) return
-    await new Promise<void>((resolve, reject) => {
+    if (track.soundId !== undefined && track.howl.playing(track.soundId)) return
+    if (track.playPromise) return track.playPromise
+
+    const playPromise = new Promise<void>((resolve, reject) => {
       if (track.soundId !== undefined) track.howl.volume(0, track.soundId)
       const soundId = track.howl.play(track.soundId)
       track.soundId = soundId
@@ -169,6 +197,12 @@ export class HowlerAudioEngine implements AudioEngine {
       track.howl.once('playerror', (_id, error) => reject(error), soundId)
       if (track.howl.playing(soundId)) resolve()
     })
+    track.playPromise = playPromise
+    try {
+      await playPromise
+    } finally {
+      if (track.playPromise === playPromise) track.playPromise = undefined
+    }
   }
 
   pause(id: TrackId): void {
