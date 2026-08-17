@@ -8,6 +8,16 @@ const API = 'https://www.googleapis.com/drive/v3/files'
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files'
 const headers = (token: string) => ({ Authorization: `Bearer ${token}` })
 
+export function driveManifestFilename(manifest: SoundscapeManifest) {
+  const safeName = manifest.name
+    .replace(/[\\/:*?"<>|\p{Cc}]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[. ]+$/g, '')
+  const shortId = manifest.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)
+  return `${safeName || 'Soundscape'} — ${shortId || 'manifest'}.soundscape.json`
+}
+
 async function upload(
   name: string,
   mimeType: string,
@@ -73,7 +83,7 @@ export async function publishSoundscape(
     item.reference.driveChecksum = uploaded.md5Checksum
   }
   await upload(
-    'soundscape.json',
+    driveManifestFilename(manifest),
     'application/json',
     new Blob([JSON.stringify(manifest)], { type: 'application/json' }),
     folder.id,
@@ -127,7 +137,7 @@ export async function importDriveSoundscape(
     { headers: headers(token) }
   )
   if (!manifestResponse.ok)
-    throw new Error('Could not download soundscape.json.')
+    throw new Error('Could not download the soundscape manifest.')
   const manifest = parseSoundscapeManifest(await manifestResponse.json())
   const cached = await store.restore(manifest.id).catch(() => undefined)
   const cachedByDriveId = new Map(

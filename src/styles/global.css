@@ -200,22 +200,37 @@ h1 {
   list-style: none;
 }
 .saved-soundscapes li {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 8px;
 }
-.saved-soundscapes li span {
-  flex: 1;
+.saved-soundscape-name {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .saved-soundscapes button {
+  min-width: 0;
   padding: 7px 9px;
   border: 1px solid #cfc9ba;
   border-radius: 7px;
   color: #24352c;
   background: white;
   font-size: 0.78rem;
+}
+@media (max-width: 650px) {
+  .saved-soundscapes li {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .saved-soundscape-name {
+    grid-column: 1 / -1;
+  }
+  .saved-soundscapes button {
+    width: 100%;
+    padding-inline: 5px;
+  }
 }
 .visually-hidden {
   position: absolute;

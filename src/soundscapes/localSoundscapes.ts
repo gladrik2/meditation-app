@@ -1,4 +1,8 @@
-import { parseSoundscapeManifest, type SoundscapeManifest } from './manifest'
+import {
+  parseSoundscapeManifest,
+  validateSoundscapeName,
+  type SoundscapeManifest
+} from './manifest'
 
 const DATABASE = 'local-soundscape-manifests'
 const STORE = 'soundscapes'
@@ -189,6 +193,25 @@ export class LocalSoundscapeStore {
       store.getAll()
     )
     return stored.map(({ manifest }) => parseSoundscapeManifest(manifest))
+  }
+
+  async rename(id: string, requestedName: string) {
+    const name = validateSoundscapeName(requestedName)
+    const stored = await transaction<StoredManifest | undefined>(
+      'readonly',
+      (store) => store.get(id)
+    )
+    if (!stored) throw new Error('The saved soundscape no longer exists.')
+    const manifest = parseSoundscapeManifest(stored.manifest)
+    const renamed = {
+      ...manifest,
+      name,
+      updatedAt: new Date().toISOString()
+    }
+    await transaction('readwrite', (store) =>
+      store.put({ id, manifest: renamed } satisfies StoredManifest)
+    )
+    return renamed
   }
 
   async delete(id: string) {

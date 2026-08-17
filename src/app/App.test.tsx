@@ -237,7 +237,7 @@ describe('App', () => {
     )
 
     await user.click(
-      screen.getByRole('button', { name: 'Delete Soundscape 2' })
+      screen.getByRole('button', { name: 'Delete local copy Soundscape 2' })
     )
     expect(remove).toHaveBeenCalledWith('second-id')
     expect(
@@ -247,6 +247,69 @@ describe('App', () => {
     ).toBeInTheDocument()
     expect(screen.getByText(/Current soundscape:/)).toHaveTextContent(
       'Soundscape 1'
+    )
+  })
+
+  it('renames current and non-current saved soundscapes independently', async () => {
+    const user = userEvent.setup()
+    const saved = (id: string, name: string): SoundscapeManifest => ({
+      version: 1,
+      id,
+      name,
+      updatedAt: '2026-08-16T00:00:00.000Z',
+      masterVolume: 1,
+      tracks: []
+    })
+    let records = [
+      saved('first-id', 'Soundscape 1'),
+      saved('second-id', 'Soundscape 2')
+    ]
+    vi.spyOn(LocalSoundscapeStore.prototype, 'list').mockImplementation(
+      async () => structuredClone(records)
+    )
+    vi.spyOn(LocalSoundscapeStore.prototype, 'restore').mockImplementation(
+      async (id) => ({
+        manifest: structuredClone(records.find((record) => record.id === id)!),
+        files: new Map()
+      })
+    )
+    vi.spyOn(LocalSoundscapeStore.prototype, 'rename').mockImplementation(
+      async (id, name) => {
+        records = records.map((record) =>
+          record.id === id ? { ...record, name } : record
+        )
+        return structuredClone(records.find((record) => record.id === id)!)
+      }
+    )
+    const prompt = vi
+      .spyOn(window, 'prompt')
+      .mockReturnValueOnce('Background calm')
+      .mockReturnValueOnce('Morning calm')
+    render(<App engine={createMockEngine()} />)
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Open Soundscape 1' })
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Rename Soundscape 2' })
+    )
+    expect(
+      await screen.findByRole('button', { name: 'Open Background calm' })
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Current soundscape:/)).toHaveTextContent(
+      'Soundscape 1'
+    )
+
+    await user.click(
+      screen.getByRole('button', { name: 'Rename Soundscape 1' })
+    )
+    expect(screen.getByText(/Current soundscape:/)).toHaveTextContent(
+      'Morning calm'
+    )
+    expect(prompt).toHaveBeenNthCalledWith(
+      1,
+      'Rename soundscape',
+      'Soundscape 2'
     )
   })
 

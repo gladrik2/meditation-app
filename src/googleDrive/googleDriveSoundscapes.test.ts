@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { LocalSoundscapeStore } from '../soundscapes/localSoundscapes'
 import type { SoundscapeManifest } from '../soundscapes/manifest'
 import {
+  driveManifestFilename,
   importDriveSoundscape,
   mapWithConcurrency,
   publishSoundscape
@@ -35,7 +36,22 @@ const response = (body: unknown) =>
   ({ ok: true, json: vi.fn().mockResolvedValue(body) }) as unknown as Response
 
 describe('Google Drive soundscapes', () => {
-  it('publishes cache validation metadata in soundscape.json', async () => {
+  it('builds descriptive, distinct, sanitized manifest filenames', () => {
+    const first = manifest()
+    first.name = 'Morning / meditation'
+    first.id = 'a13f5c2d-1111-4111-8111-111111111111'
+    const second = { ...first, id: 'b24e6d3c-2222-4222-8222-222222222222' }
+
+    expect(driveManifestFilename(first)).toBe(
+      'Morning meditation — a13f5c2d.soundscape.json'
+    )
+    expect(driveManifestFilename(second)).toBe(
+      'Morning meditation — b24e6d3c.soundscape.json'
+    )
+    expect(first.name).toBe('Morning / meditation')
+  })
+
+  it('publishes cache validation metadata in the named manifest', async () => {
     const published = manifest()
     const uploadStart = () =>
       ({
@@ -74,9 +90,12 @@ describe('Google Drive soundscapes', () => {
       expect.stringContaining('fields=id,modifiedTime,size,md5Checksum'),
       expect.anything()
     )
+    expect(JSON.parse(String(fetcher.mock.calls[3][1]?.body))).toMatchObject({
+      name: 'Landscape — landscap.soundscape.json'
+    })
   })
 
-  it('uses a cached file when Drive metadata has not changed', async () => {
+  it('imports a legacy soundscape.json using its file ID and cached media', async () => {
     const savedFile = new File(['rain'], 'rain.opus')
     const driveManifest = manifest()
     delete driveManifest.tracks[0].reference.driveModifiedTime

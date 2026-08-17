@@ -1,4 +1,17 @@
 export const SOUNDSCAPE_MANIFEST_VERSION = 1 as const
+export const SOUNDSCAPE_NAME_MAX_LENGTH = 80
+
+export function validateSoundscapeName(value: string) {
+  if (/\p{Cc}/u.test(value))
+    throw new Error('Soundscape names cannot contain control characters.')
+  const name = value.trim()
+  if (!name) throw new Error('Enter a soundscape name.')
+  if ([...name].length > SOUNDSCAPE_NAME_MAX_LENGTH)
+    throw new Error(
+      `Soundscape names must be ${SOUNDSCAPE_NAME_MAX_LENGTH} characters or fewer.`
+    )
+  return name
+}
 
 export interface MediaReference {
   localPath: string

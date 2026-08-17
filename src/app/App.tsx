@@ -18,6 +18,7 @@ import { LocalSoundscapeStore } from '../soundscapes/localSoundscapes'
 import {
   SOUNDSCAPE_MANIFEST_VERSION,
   nextSoundscapeName,
+  validateSoundscapeName,
   type SoundscapeManifest
 } from '../soundscapes/manifest'
 import {
@@ -208,12 +209,14 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
   }
 
   const saveAsNew = async () => {
-    const name = window
-      .prompt('Soundscape name', await suggestedSoundscapeName())
-      ?.trim()
-    if (!name) return
-    setSaveMessage('Saving…')
+    const requestedName = window.prompt(
+      'Soundscape name',
+      await suggestedSoundscapeName()
+    )
+    if (requestedName === null) return
     try {
+      const name = validateSoundscapeName(requestedName)
+      setSaveMessage('Saving…')
       const { manifest, files, trackIds } = buildManifest(
         name,
         crypto.randomUUID()
@@ -268,6 +271,22 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
     }
   }
 
+  const renameSaved = async (saved: SoundscapeManifest) => {
+    const requestedName = window.prompt('Rename soundscape', saved.name)
+    if (requestedName === null) return
+    try {
+      const renamed = await localStore.rename(
+        saved.id,
+        validateSoundscapeName(requestedName)
+      )
+      if (savedId === saved.id) setSavedName(renamed.name)
+      await refreshSavedSoundscapes()
+      setSaveMessage(`Renamed soundscape to “${renamed.name}”.`)
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : 'Rename failed.')
+    }
+  }
+
   const openSaved = async (id: string) => {
     try {
       const restored = await localStore.restore(id)
@@ -286,12 +305,14 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
   }
 
   const saveToDrive = async () => {
-    const name = window
-      .prompt('Soundscape name', await suggestedSoundscapeName())
-      ?.trim()
-    if (!name) return
-    setSaveMessage('Exporting soundscape to Google Drive…')
+    const requestedName = window.prompt(
+      'Soundscape name',
+      await suggestedSoundscapeName()
+    )
+    if (requestedName === null) return
     try {
+      const name = validateSoundscapeName(requestedName)
+      setSaveMessage('Exporting soundscape to Google Drive…')
       const token = await driveToken()
       if (!token) {
         setSaveMessage(undefined)
@@ -408,18 +429,29 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
               <ul>
                 {savedSoundscapes.map((saved) => (
                   <li key={saved.id}>
-                    <span>{saved.name}</span>
+                    <span className="saved-soundscape-name" title={saved.name}>
+                      {saved.name}
+                    </span>
                     <button
                       type="button"
+                      aria-label={`Open ${saved.name}`}
                       onClick={() => void openSaved(saved.id)}
                     >
-                      Open {saved.name}
+                      Open
                     </button>
                     <button
                       type="button"
+                      aria-label={`Rename ${saved.name}`}
+                      onClick={() => void renameSaved(saved)}
+                    >
+                      Rename
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Delete local copy ${saved.name}`}
                       onClick={() => void deleteSaved(saved.id)}
                     >
-                      Delete {saved.name}
+                      Delete local copy
                     </button>
                   </li>
                 ))}

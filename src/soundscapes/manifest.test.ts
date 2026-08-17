@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { nextSoundscapeName, parseSoundscapeManifest } from './manifest'
+import {
+  nextSoundscapeName,
+  parseSoundscapeManifest,
+  validateSoundscapeName
+} from './manifest'
 
 const track = {
   name: 'rain.opus',
@@ -22,6 +26,22 @@ describe('soundscape manifest', () => {
         ' Soundscape 3 '
       ])
     ).toBe('Soundscape 4')
+  })
+
+  it('trims and validates soundscape names by Unicode character count', () => {
+    expect(validateSoundscapeName('  Morning calm  ')).toBe('Morning calm')
+    expect(validateSoundscapeName('😀'.repeat(80))).toHaveLength(160)
+    expect(() => validateSoundscapeName('')).toThrow('Enter a soundscape name')
+    expect(() => validateSoundscapeName('calm\nnight')).toThrow(
+      'control characters'
+    )
+    expect(() => validateSoundscapeName('calm\n')).toThrow('control characters')
+    expect(() => validateSoundscapeName('a'.repeat(81))).toThrow(
+      '80 characters or fewer'
+    )
+    expect(() => validateSoundscapeName('😀'.repeat(81))).toThrow(
+      '80 characters or fewer'
+    )
   })
 
   it('migrates an unversioned manifest and supplies the default master volume', () => {

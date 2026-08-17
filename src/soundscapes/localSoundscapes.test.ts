@@ -196,6 +196,30 @@ describe('LocalSoundscapeStore', () => {
     ])
   })
 
+  it('renames only manifest metadata while preserving identity and media', async () => {
+    const store = new LocalSoundscapeStore()
+    const saved = structuredClone(manifest)
+    saved.tracks[0].reference.driveFileId = 'drive-media-id'
+    await store.save(saved, new Map([['rain.opus', streamFile('rain.opus')]]))
+    const before = await store.restore(saved.id)
+    const originalPath = before!.manifest.tracks[0].reference.localPath
+    const originalFiles = [...files.keys()]
+    const writeMedia = vi.spyOn(store, 'writeMedia')
+
+    const renamed = await store.rename(saved.id, '  Evening rain  ')
+    const after = await store.restore(saved.id)
+
+    expect(renamed).toMatchObject({ id: saved.id, name: 'Evening rain' })
+    expect(renamed.updatedAt).not.toBe(saved.updatedAt)
+    expect(after!.manifest.tracks[0].reference).toMatchObject({
+      localPath: originalPath,
+      driveFileId: 'drive-media-id'
+    })
+    expect([...files.keys()]).toEqual(originalFiles)
+    expect(writeMedia).not.toHaveBeenCalled()
+    expect(localStorage.getItem('last-soundscape-id')).toBe(saved.id)
+  })
+
   it('upserts one record when the same Drive manifest ID is cached repeatedly', async () => {
     const store = new LocalSoundscapeStore()
     const saved = structuredClone(manifest)
