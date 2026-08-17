@@ -470,9 +470,7 @@ describe('App', () => {
     await user.click(viewer.querySelector('img')!)
     expect(
       screen.queryByRole('dialog', { name: /Soundscape image viewer/ })
-    ).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Theater mode' }))
+    ).toBeInTheDocument()
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(
       screen.queryByRole('dialog', { name: /Soundscape image viewer/ })
@@ -480,6 +478,86 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: 'Remove' }))
     expect(screen.queryByText('forest.jpg')).not.toBeInTheDocument()
+  })
+
+  it('zooms the image without rendering viewer controls', async () => {
+    const user = userEvent.setup()
+    render(<App engine={createMockEngine()} />)
+    await user.upload(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      imageFile('forest.jpg')
+    )
+    await user.click(screen.getByRole('button', { name: 'Theater mode' }))
+    const viewer = screen.getByRole('dialog', { name: /Pinch.*browser Back/i })
+    const displayedImage = viewer.querySelector('img')!
+
+    fireEvent.doubleClick(displayedImage, { clientX: 100, clientY: 100 })
+    expect(displayedImage.style.transform).toContain('scale(2)')
+    fireEvent.keyDown(document, { key: '0' })
+    expect(displayedImage.style.transform).toContain('scale(1)')
+    fireEvent.wheel(viewer, { clientX: 100, clientY: 100, deltaY: -200 })
+    expect(displayedImage.style.transform).not.toContain('scale(1)')
+    expect(viewer.querySelectorAll('button')).toHaveLength(0)
+  })
+
+  it('distinguishes touch taps from pans and pinches and clears pending taps', async () => {
+    const user = userEvent.setup()
+    render(<App engine={createMockEngine()} />)
+    await user.upload(
+      document.querySelector<HTMLInputElement>('#audio-files')!,
+      imageFile('forest.jpg')
+    )
+    await user.click(screen.getByRole('button', { name: 'Theater mode' }))
+    const viewer = screen.getByRole('dialog', {
+      name: /Soundscape image viewer/
+    })
+    const displayedImage = viewer.querySelector('img')!
+    const touch = (
+      type: 'pointerDown' | 'pointerMove' | 'pointerUp',
+      pointerId: number,
+      x: number,
+      y: number
+    ) =>
+      fireEvent[type](viewer, {
+        pointerId,
+        pointerType: 'touch',
+        clientX: x,
+        clientY: y
+      })
+
+    touch('pointerDown', 1, 100, 100)
+    touch('pointerMove', 1, 130, 100)
+    touch('pointerUp', 1, 130, 100)
+    touch('pointerDown', 1, 130, 100)
+    touch('pointerUp', 1, 130, 100)
+    expect(displayedImage.style.transform).toContain('scale(1)')
+
+    touch('pointerDown', 1, 100, 100)
+    touch('pointerDown', 2, 100, 100)
+    touch('pointerMove', 2, 100.5, 100)
+    touch('pointerUp', 2, 100.5, 100)
+    touch('pointerUp', 1, 100, 100)
+    touch('pointerDown', 1, 100, 100)
+    touch('pointerUp', 1, 100, 100)
+    expect(displayedImage.style.transform).toContain('scale(1)')
+    expect(displayedImage.style.transform).not.toContain('NaN')
+
+    fireEvent.keyDown(document, { key: '0' })
+    touch('pointerDown', 1, 200, 200)
+    touch('pointerUp', 1, 200, 200)
+    touch('pointerDown', 1, 200, 200)
+    touch('pointerUp', 1, 200, 200)
+    expect(displayedImage.style.transform).toContain('scale(2)')
+    fireEvent.doubleClick(viewer, { clientX: 200, clientY: 200 })
+    expect(displayedImage.style.transform).toContain('scale(2)')
+    touch('pointerDown', 1, 200, 200)
+    touch('pointerUp', 1, 200, 200)
+    expect(displayedImage.style.transform).toContain('scale(2)')
+
+    fireEvent.keyDown(document, { key: '0' })
+    touch('pointerDown', 1, 250, 250)
+    touch('pointerUp', 1, 250, 250)
+    expect(displayedImage.style.transform).toContain('scale(1)')
   })
 
   it('sorts audio and image files selected through the same upload control', async () => {

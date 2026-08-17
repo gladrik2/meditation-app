@@ -97,9 +97,37 @@ test('Full screen retains Theater mode when fullscreen is unavailable', async ({
     })
   })
   await uploadLargeImage(page)
+  const historyLength = await page.evaluate(() => history.length)
   await page.getByRole('button', { name: 'Full screen' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
+  expect(await page.evaluate(() => history.length)).toBe(historyLength + 1)
   await expectImageWithinViewport(page)
+  await page.goBack()
+  await expect(page.getByRole('dialog')).toBeHidden()
+  await expect(
+    page.getByRole('heading', { name: /Layer sounds/ })
+  ).toBeVisible()
+})
+
+test('rejected fullscreen falls back to Theater mode and browser Back closes it', async ({
+  page
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(Element.prototype, 'requestFullscreen', {
+      configurable: true,
+      value: () => Promise.reject(new Error('Fullscreen denied'))
+    })
+  })
+  await uploadLargeImage(page)
+  const historyLength = await page.evaluate(() => history.length)
+  await page.getByRole('button', { name: 'Full screen' }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  expect(await page.evaluate(() => history.length)).toBe(historyLength + 1)
+  await page.goBack()
+  await expect(page.getByRole('dialog')).toBeHidden()
+  await expect(
+    page.getByRole('heading', { name: /Layer sounds/ })
+  ).toBeVisible()
 })
 
 test('large image fits within every viewport edge in native full screen', async ({
@@ -114,6 +142,7 @@ test('large image fits within every viewport edge in native full screen', async 
     'Fullscreen API is unavailable in this browser'
   )
 
+  const historyLength = await page.evaluate(() => history.length)
   await page.getByRole('button', { name: 'Full screen' }).click()
   const enteredFullscreen = await page
     .waitForFunction(() => document.fullscreenElement !== null, null, {
@@ -126,4 +155,25 @@ test('large image fits within every viewport edge in native full screen', async 
     'Native fullscreen is unavailable in this automation environment'
   )
   await expectImageWithinViewport(page)
+  expect(await page.evaluate(() => history.length)).toBe(historyLength)
+  await page.evaluate(() => document.exitFullscreen())
+  await expect(page.getByRole('dialog')).toBeHidden()
+  await expect(
+    page.getByRole('heading', { name: /Layer sounds/ })
+  ).toBeVisible()
+  expect(await page.evaluate(() => history.length)).toBe(historyLength)
+})
+
+test('repeated Theater open and Back cycles do not accumulate history entries', async ({
+  page
+}) => {
+  await uploadLargeImage(page)
+  const historyLength = await page.evaluate(() => history.length)
+  for (let cycle = 0; cycle < 3; cycle += 1) {
+    await page.getByRole('button', { name: 'Theater mode' }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    expect(await page.evaluate(() => history.length)).toBe(historyLength + 1)
+    await page.goBack()
+    await expect(page.getByRole('dialog')).toBeHidden()
+  }
 })
