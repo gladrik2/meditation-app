@@ -131,14 +131,22 @@ describe('LocalSoundscapeStore', () => {
         })
     })
     const store = new LocalSoundscapeStore()
+    const savedManifest = structuredClone(manifest)
+    savedManifest.timerSettings = {
+      mode: 'countdown',
+      minutes: 25,
+      startMedia: false
+    }
 
-    await store.save(
-      structuredClone(manifest),
-      new Map([['rain.opus', source]])
-    )
+    await store.save(savedManifest, new Map([['rain.opus', source]]))
     const restored = await store.restoreLast()
 
     expect(restored?.manifest.name).toBe('Offline')
+    expect(restored?.manifest.timerSettings).toEqual({
+      mode: 'countdown',
+      minutes: 25,
+      startMedia: false
+    })
     expect([...restored!.files.values()][0]).toMatchObject({
       name: 'rain.opus',
       type: 'audio/opus'

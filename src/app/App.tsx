@@ -85,8 +85,6 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
   ) => {
     if (!restored) return
     const { manifest, files } = restored
-    setTimerSessionKey((key) => key + 1)
-    setTimerSettings({ ...manifest.timerSettings })
     const trackFiles = manifest.tracks.map((track) =>
       files.get(track.reference.localPath)
     )
@@ -111,6 +109,8 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
     setImageLocalPath(manifest.image?.reference.localPath)
     setSavedId(manifest.id)
     setSavedName(manifest.name)
+    setTimerSessionKey((key) => key + 1)
+    setTimerSettings({ ...manifest.timerSettings })
     setSaveMessage(`Restored “${manifest.name}” from ${source}.`)
   }
 

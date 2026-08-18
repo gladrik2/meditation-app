@@ -54,6 +54,11 @@ describe('Google Drive soundscapes', () => {
 
   it('publishes cache validation metadata in the named manifest', async () => {
     const published = manifest()
+    published.timerSettings = {
+      mode: 'countdown',
+      minutes: 25,
+      startMedia: false
+    }
     const uploadStart = () =>
       ({
         ok: true,
@@ -93,6 +98,49 @@ describe('Google Drive soundscapes', () => {
     )
     expect(JSON.parse(String(fetcher.mock.calls[3][1]?.body))).toMatchObject({
       name: 'Landscape — landscap.soundscape.json'
+    })
+    const uploadedManifest = fetcher.mock.calls[4][1]?.body as Blob
+    expect(JSON.parse(await uploadedManifest.text()).timerSettings).toEqual({
+      mode: 'countdown',
+      minutes: 25,
+      startMedia: false
+    })
+  })
+
+  it('retains timer settings while importing a Drive manifest', async () => {
+    const incoming = manifest()
+    incoming.tracks = []
+    incoming.timerSettings = {
+      mode: 'countdown',
+      minutes: 25,
+      startMedia: false
+    }
+    let committed: SoundscapeManifest | undefined
+    const store = {
+      restore: vi
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockImplementation(async () => ({
+          manifest: structuredClone(committed),
+          files: new Map()
+        })),
+      commitManifest: vi.fn(async (value: SoundscapeManifest) => {
+        committed = structuredClone(value)
+      }),
+      removeMedia: vi.fn()
+    } as unknown as LocalSoundscapeStore
+
+    const imported = await importDriveSoundscape(
+      'manifest-id',
+      'token',
+      store,
+      vi.fn().mockResolvedValue(response(incoming))
+    )
+
+    expect(imported.manifest.timerSettings).toEqual({
+      mode: 'countdown',
+      minutes: 25,
+      startMedia: false
     })
   })
 
