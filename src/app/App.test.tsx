@@ -91,8 +91,10 @@ describe('App', () => {
     )
 
     expect(
-      await screen.findByRole('button', { name: 'Open Soundscape 2' })
-    ).toBeInTheDocument()
+      await screen.findByRole('button', {
+        name: 'Current soundscape: Soundscape 2'
+      })
+    ).toBeDisabled()
     expect(
       screen.getByText('Restored “Soundscape 2” from Google Drive.')
     ).toBeInTheDocument()
@@ -257,6 +259,12 @@ describe('App', () => {
     expect(screen.getByText(/Current soundscape:/)).toHaveTextContent(
       'Soundscape 1'
     )
+    const currentRow = screen.getByRole('listitem', { current: true })
+    expect(currentRow).toHaveClass('is-current')
+    expect(currentRow).toHaveTextContent('Current')
+    expect(
+      screen.getByRole('button', { name: 'Current soundscape: Soundscape 1' })
+    ).toBeDisabled()
 
     await user.click(
       screen.getByRole('button', { name: 'Delete local copy Soundscape 2' })
@@ -270,6 +278,21 @@ describe('App', () => {
     expect(screen.getByText(/Current soundscape:/)).toHaveTextContent(
       'Soundscape 1'
     )
+  })
+
+  it('allows the countdown minutes to be cleared while entering a new value', async () => {
+    const user = userEvent.setup()
+    render(<App engine={createMockEngine()} />)
+
+    await user.selectOptions(screen.getByLabelText('Timer type'), 'countdown')
+    const minutes = screen.getByLabelText('Minutes')
+    await user.clear(minutes)
+    expect(minutes).toHaveValue(null)
+    await user.type(minutes, '30')
+    await user.tab()
+
+    expect(minutes).toHaveValue(30)
+    expect(screen.getByText('30:00')).toBeInTheDocument()
   })
 
   it('restores all timer settings from the last soundscape', async () => {
@@ -312,6 +335,9 @@ describe('App', () => {
     vi.spyOn(LocalSoundscapeStore.prototype, 'list').mockResolvedValue([
       manifest
     ])
+    vi.spyOn(LocalSoundscapeStore.prototype, 'restoreLast').mockResolvedValue(
+      undefined
+    )
     vi.spyOn(LocalSoundscapeStore.prototype, 'restore').mockResolvedValue({
       manifest,
       files: new Map()
@@ -420,6 +446,9 @@ describe('App', () => {
     ]
     vi.spyOn(LocalSoundscapeStore.prototype, 'list').mockImplementation(
       async () => structuredClone(records)
+    )
+    vi.spyOn(LocalSoundscapeStore.prototype, 'restoreLast').mockResolvedValue(
+      undefined
     )
     vi.spyOn(LocalSoundscapeStore.prototype, 'restore').mockImplementation(
       async (id) => ({

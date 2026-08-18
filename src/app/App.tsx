@@ -437,16 +437,33 @@ export function App({ engine: suppliedEngine, driveAuth }: AppProps) {
               <h2 id="saved-title">Saved soundscapes</h2>
               <ul>
                 {savedSoundscapes.map((saved) => (
-                  <li key={saved.id}>
-                    <span className="saved-soundscape-name" title={saved.name}>
-                      {saved.name}
-                    </span>
+                  <li
+                    key={saved.id}
+                    className={saved.id === savedId ? 'is-current' : undefined}
+                    aria-current={saved.id === savedId ? 'true' : undefined}
+                  >
+                    <div className="saved-soundscape-title">
+                      <span
+                        className="saved-soundscape-name"
+                        title={saved.name}
+                      >
+                        {saved.name}
+                      </span>
+                      {saved.id === savedId && (
+                        <span className="current-badge">Current</span>
+                      )}
+                    </div>
                     <button
                       type="button"
-                      aria-label={`Open ${saved.name}`}
+                      aria-label={
+                        saved.id === savedId
+                          ? `Current soundscape: ${saved.name}`
+                          : `Open ${saved.name}`
+                      }
+                      disabled={saved.id === savedId}
                       onClick={() => void openSaved(saved.id)}
                     >
-                      Open
+                      {saved.id === savedId ? 'Current' : 'Open'}
                     </button>
                     <button
                       type="button"

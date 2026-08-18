@@ -205,6 +205,27 @@ h1 {
   align-items: center;
   gap: 8px;
 }
+
+.saved-soundscapes li.is-current {
+  border-left: 0.25rem solid var(--accent, #697a52);
+  background: rgba(105, 122, 82, 0.12);
+  padding: 6px 6px 6px 8px;
+}
+
+.saved-soundscape-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+.current-badge {
+  border-radius: 999px;
+  background: #697a52;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+}
 .saved-soundscape-name {
   min-width: 0;
   overflow: hidden;
@@ -224,7 +245,7 @@ h1 {
   .saved-soundscapes li {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-  .saved-soundscape-name {
+  .saved-soundscape-title {
     grid-column: 1 / -1;
   }
   .saved-soundscapes button {
