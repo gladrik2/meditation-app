@@ -10,7 +10,6 @@
 
 ## Privacy
 
-- User audio must remain local to the user's device and must never be uploaded.
 - Never add telemetry containing filenames or audio contents.
 - Never commit user audio, secrets, or credentials.
 
@@ -32,3 +31,5 @@ npm run build
 - Do not add binary files unless specifically requested.
 - Use text-based SVG when an image or icon can reasonably be represented as text.
 - Do not perform unrelated refactors.
+- Never run or reference `/opt/codex/mcp/make_pr.py`.
+- Do not attempt to create a pull request from inside the agent container.
