@@ -162,6 +162,32 @@ describe('LocalSoundscapeStore', () => {
     expect(directories.has(manifest.id)).toBe(false)
   })
 
+  it('restores a timer-only soundscape without requiring an OPFS directory', async () => {
+    const store = new LocalSoundscapeStore()
+    const timerOnly: SoundscapeManifest = {
+      version: 1,
+      id: 'timer-only',
+      name: 'Timer only',
+      updatedAt: '2026-08-18T00:00:00.000Z',
+      masterVolume: 1,
+      timerSettings: { mode: 'countdown', minutes: 25, startMedia: false },
+      tracks: []
+    }
+
+    await store.save(timerOnly, new Map())
+
+    expect(directories.has(timerOnly.id)).toBe(false)
+    await expect(store.restore(timerOnly.id)).resolves.toEqual({
+      manifest: timerOnly,
+      files: new Map()
+    })
+    await expect(store.restoreLast()).resolves.toEqual({
+      manifest: timerOnly,
+      files: new Map()
+    })
+    await store.delete(timerOnly.id)
+  })
+
   it('reports persistent-storage denial without failing', async () => {
     vi.mocked(navigator.storage.persist).mockResolvedValue(false)
     await expect(new LocalSoundscapeStore().requestPersistence()).resolves.toBe(
