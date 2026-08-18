@@ -27,6 +27,7 @@ export function MeditationTimer({
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [isRunning, setIsRunning] = useState(false)
   const [isComplete, setIsComplete] = useState(false)
+  const [minutesDraft, setMinutesDraft] = useState(String(settings.minutes))
   const onCompleteRef = useRef(onComplete)
   const startedAt = useRef(0)
   const elapsedAtStart = useRef(0)
@@ -92,6 +93,10 @@ export function MeditationTimer({
     setIsComplete(false)
   }
 
+  const normalizeMinutesDraft = () => {
+    setMinutesDraft(String(minutes))
+  }
+
   return (
     <section className="meditation-timer" aria-labelledby="timer-heading">
       <div className="timer-settings">
@@ -116,19 +121,28 @@ export function MeditationTimer({
             <input
               id="timer-minutes"
               type="number"
+              inputMode="numeric"
               min="1"
               step="1"
-              value={minutes}
+              value={minutesDraft}
               disabled={isRunning}
               onChange={(event) => {
-                const value = Number.parseInt(event.target.value, 10)
+                const draft = event.target.value
+                setMinutesDraft(draft)
+                if (!/^[1-9]\d*$/.test(draft)) return
+
+                const value = Number.parseInt(draft, 10)
                 onSettingsChange({
                   ...settings,
-                  minutes: Math.max(1, value || 1)
+                  minutes: value
                 })
                 setIsRunning(false)
                 setElapsedSeconds(0)
                 setIsComplete(false)
+              }}
+              onBlur={normalizeMinutesDraft}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.currentTarget.blur()
               }}
             />
           </label>
