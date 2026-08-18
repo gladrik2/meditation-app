@@ -68,6 +68,7 @@ const manifest: SoundscapeManifest = {
   name: 'Offline',
   updatedAt: '2026-08-14T00:00:00.000Z',
   masterVolume: 0.5,
+  timerSettings: { mode: 'stopwatch', minutes: 10, startMedia: true },
   tracks: [
     {
       name: 'rain.opus',
@@ -130,14 +131,22 @@ describe('LocalSoundscapeStore', () => {
         })
     })
     const store = new LocalSoundscapeStore()
+    const savedManifest = structuredClone(manifest)
+    savedManifest.timerSettings = {
+      mode: 'countdown',
+      minutes: 25,
+      startMedia: false
+    }
 
-    await store.save(
-      structuredClone(manifest),
-      new Map([['rain.opus', source]])
-    )
+    await store.save(savedManifest, new Map([['rain.opus', source]]))
     const restored = await store.restoreLast()
 
     expect(restored?.manifest.name).toBe('Offline')
+    expect(restored?.manifest.timerSettings).toEqual({
+      mode: 'countdown',
+      minutes: 25,
+      startMedia: false
+    })
     expect([...restored!.files.values()][0]).toMatchObject({
       name: 'rain.opus',
       type: 'audio/opus'
@@ -151,6 +160,32 @@ describe('LocalSoundscapeStore', () => {
     await store.delete(manifest.id)
     expect(await store.restoreLast()).toBeUndefined()
     expect(directories.has(manifest.id)).toBe(false)
+  })
+
+  it('restores a timer-only soundscape without requiring an OPFS directory', async () => {
+    const store = new LocalSoundscapeStore()
+    const timerOnly: SoundscapeManifest = {
+      version: 1,
+      id: 'timer-only',
+      name: 'Timer only',
+      updatedAt: '2026-08-18T00:00:00.000Z',
+      masterVolume: 1,
+      timerSettings: { mode: 'countdown', minutes: 25, startMedia: false },
+      tracks: []
+    }
+
+    await store.save(timerOnly, new Map())
+
+    expect(directories.has(timerOnly.id)).toBe(false)
+    await expect(store.restore(timerOnly.id)).resolves.toEqual({
+      manifest: timerOnly,
+      files: new Map()
+    })
+    await expect(store.restoreLast()).resolves.toEqual({
+      manifest: timerOnly,
+      files: new Map()
+    })
+    await store.delete(timerOnly.id)
   })
 
   it('reports persistent-storage denial without failing', async () => {

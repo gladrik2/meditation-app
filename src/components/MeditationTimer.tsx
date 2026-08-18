@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-
-type TimerMode = 'stopwatch' | 'countdown'
+import type { MeditationTimerSettings } from '../soundscapes/manifest'
 
 interface MeditationTimerProps {
+  settings: MeditationTimerSettings
+  onSettingsChange: (settings: MeditationTimerSettings) => void
   onStart: () => void | Promise<void>
   onStartWithMedia: () => void | Promise<void>
   onComplete: () => void
@@ -17,20 +18,20 @@ const formatTime = (totalSeconds: number) => {
 }
 
 export function MeditationTimer({
+  settings,
+  onSettingsChange,
   onStart,
   onStartWithMedia,
   onComplete
 }: MeditationTimerProps) {
-  const [mode, setMode] = useState<TimerMode>('stopwatch')
-  const [minutes, setMinutes] = useState(10)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [isRunning, setIsRunning] = useState(false)
-  const [startMedia, setStartMedia] = useState(false)
   const [isComplete, setIsComplete] = useState(false)
   const onCompleteRef = useRef(onComplete)
   const startedAt = useRef(0)
   const elapsedAtStart = useRef(0)
 
+  const { mode, minutes, startMedia } = settings
   const durationSeconds = minutes * 60
   const displayedSeconds =
     mode === 'countdown'
@@ -84,8 +85,8 @@ export function MeditationTimer({
     setIsComplete(false)
   }
 
-  const changeMode = (nextMode: TimerMode) => {
-    setMode(nextMode)
+  const changeMode = (nextMode: MeditationTimerSettings['mode']) => {
+    onSettingsChange({ ...settings, mode: nextMode })
     setIsRunning(false)
     setElapsedSeconds(0)
     setIsComplete(false)
@@ -101,7 +102,9 @@ export function MeditationTimer({
             id="timer-mode"
             value={mode}
             disabled={isRunning}
-            onChange={(event) => changeMode(event.target.value as TimerMode)}
+            onChange={(event) =>
+              changeMode(event.target.value as MeditationTimerSettings['mode'])
+            }
           >
             <option value="stopwatch">Count up</option>
             <option value="countdown">Count down</option>
@@ -119,7 +122,11 @@ export function MeditationTimer({
               disabled={isRunning}
               onChange={(event) => {
                 const value = Number.parseInt(event.target.value, 10)
-                setMinutes(Math.max(1, value || 1))
+                onSettingsChange({
+                  ...settings,
+                  minutes: Math.max(1, value || 1)
+                })
+                setIsRunning(false)
                 setElapsedSeconds(0)
                 setIsComplete(false)
               }}
@@ -140,7 +147,9 @@ export function MeditationTimer({
         <input
           type="checkbox"
           checked={startMedia}
-          onChange={(event) => setStartMedia(event.target.checked)}
+          onChange={(event) =>
+            onSettingsChange({ ...settings, startMedia: event.target.checked })
+          }
         />
         Play all audio and full screen the image when meditation starts
       </label>

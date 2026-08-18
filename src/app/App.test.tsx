@@ -62,6 +62,7 @@ describe('App', () => {
       name: 'Soundscape 2',
       updatedAt: '2026-08-16T00:00:00.000Z',
       masterVolume: 1,
+      timerSettings: { mode: 'stopwatch', minutes: 10, startMedia: true },
       tracks: []
     }
     driveOperations.importSoundscape.mockResolvedValue({
@@ -178,21 +179,41 @@ describe('App', () => {
       .mockReturnValueOnce('00000000-0000-4000-8000-000000000002')
     render(<App engine={createMockEngine()} />)
 
+    await user.selectOptions(screen.getByLabelText('Timer type'), 'countdown')
+    fireEvent.change(screen.getByLabelText('Minutes'), {
+      target: { value: '25' }
+    })
+    await user.click(
+      screen.getByLabelText(
+        'Play all audio and full screen the image when meditation starts'
+      )
+    )
+
     await user.click(
       screen.getByRole('button', { name: 'Save on this device' })
     )
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
     expect(save.mock.calls[0][0]).toMatchObject({
       id: '00000000-0000-4000-8000-000000000001',
-      name: 'Morning'
+      name: 'Morning',
+      timerSettings: { mode: 'countdown', minutes: 25, startMedia: false }
     })
     expect(screen.getByText(/Current soundscape:/)).toHaveTextContent('Morning')
 
+    fireEvent.change(screen.getByLabelText('Minutes'), {
+      target: { value: '30' }
+    })
+    await user.click(
+      screen.getByLabelText(
+        'Play all audio and full screen the image when meditation starts'
+      )
+    )
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
     expect(save.mock.calls[1][0]).toMatchObject({
       id: '00000000-0000-4000-8000-000000000001',
-      name: 'Morning'
+      name: 'Morning',
+      timerSettings: { mode: 'countdown', minutes: 30, startMedia: true }
     })
 
     await user.click(
@@ -213,6 +234,7 @@ describe('App', () => {
       name,
       updatedAt: '2026-08-16T00:00:00.000Z',
       masterVolume: 1,
+      timerSettings: { mode: 'stopwatch', minutes: 10, startMedia: true },
       tracks: []
     })
     const first = saved('first-id', 'Soundscape 1')
@@ -250,6 +272,137 @@ describe('App', () => {
     )
   })
 
+  it('restores all timer settings from the last soundscape', async () => {
+    const manifest: SoundscapeManifest = {
+      version: 1,
+      id: 'last-id',
+      name: 'Last meditation',
+      updatedAt: '2026-08-17T00:00:00.000Z',
+      masterVolume: 1,
+      timerSettings: { mode: 'countdown', minutes: 25, startMedia: false },
+      tracks: []
+    }
+    vi.spyOn(LocalSoundscapeStore.prototype, 'restoreLast').mockResolvedValue({
+      manifest,
+      files: new Map()
+    })
+
+    render(<App engine={createMockEngine()} />)
+
+    expect(await screen.findByLabelText('Minutes')).toHaveValue(25)
+    expect(screen.getByLabelText('Timer type')).toHaveValue('countdown')
+    expect(
+      screen.getByLabelText(
+        'Play all audio and full screen the image when meditation starts'
+      )
+    ).not.toBeChecked()
+    expect(screen.getByText('25:00')).toBeInTheDocument()
+  })
+
+  it('opens saved timer settings and resets a completed timer session', async () => {
+    const manifest: SoundscapeManifest = {
+      version: 1,
+      id: 'timed-id',
+      name: 'Long meditation',
+      updatedAt: '2026-08-17T00:00:00.000Z',
+      masterVolume: 1,
+      timerSettings: { mode: 'countdown', minutes: 25, startMedia: false },
+      tracks: []
+    }
+    vi.spyOn(LocalSoundscapeStore.prototype, 'list').mockResolvedValue([
+      manifest
+    ])
+    vi.spyOn(LocalSoundscapeStore.prototype, 'restore').mockResolvedValue({
+      manifest,
+      files: new Map()
+    })
+    render(<App engine={createMockEngine()} />)
+    const open = await screen.findByRole('button', {
+      name: 'Open Long meditation'
+    })
+    vi.useFakeTimers()
+    fireEvent.change(screen.getByLabelText('Timer type'), {
+      target: { value: 'countdown' }
+    })
+    fireEvent.change(screen.getByLabelText('Minutes'), {
+      target: { value: '1' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Start Meditation/ }))
+    await act(() => vi.advanceTimersByTimeAsync(60_000))
+    expect(screen.getByText('Meditation completed')).toBeInTheDocument()
+
+    fireEvent.click(open)
+    await act(async () => {})
+
+    expect(screen.getByLabelText('Timer type')).toHaveValue('countdown')
+    expect(screen.getByLabelText('Minutes')).toHaveValue(25)
+    expect(
+      screen.getByLabelText(
+        'Play all audio and full screen the image when meditation starts'
+      )
+    ).not.toBeChecked()
+    expect(screen.getByText('25:00')).toBeInTheDocument()
+    expect(screen.queryByText('Meditation completed')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ⅱ Pause' })).toBeDisabled()
+  })
+
+  it('keeps current timer settings when opening a soundscape fails validation', async () => {
+    const user = userEvent.setup()
+    const manifest: SoundscapeManifest = {
+      version: 1,
+      id: 'broken-id',
+      name: 'Broken meditation',
+      updatedAt: '2026-08-17T00:00:00.000Z',
+      masterVolume: 1,
+      timerSettings: { mode: 'stopwatch', minutes: 10, startMedia: true },
+      tracks: [
+        {
+          name: 'missing.wav',
+          mimeType: 'audio/wav',
+          size: 1,
+          volume: 1,
+          isSoundEffect: false,
+          effectChance: 50,
+          reference: { localPath: 'missing.media' }
+        }
+      ]
+    }
+    vi.spyOn(LocalSoundscapeStore.prototype, 'list').mockResolvedValue([
+      manifest
+    ])
+    vi.spyOn(LocalSoundscapeStore.prototype, 'restore').mockResolvedValue({
+      manifest,
+      files: new Map()
+    })
+    render(<App engine={createMockEngine()} />)
+    await user.selectOptions(screen.getByLabelText('Timer type'), 'countdown')
+    fireEvent.change(screen.getByLabelText('Minutes'), {
+      target: { value: '17' }
+    })
+    await user.click(
+      screen.getByLabelText(
+        'Play all audio and full screen the image when meditation starts'
+      )
+    )
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Open Broken meditation' })
+    )
+
+    expect(
+      await screen.findByText(
+        'A saved soundscape file is missing from local storage.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Timer type')).toHaveValue('countdown')
+    expect(screen.getByLabelText('Minutes')).toHaveValue(17)
+    expect(
+      screen.getByLabelText(
+        'Play all audio and full screen the image when meditation starts'
+      )
+    ).not.toBeChecked()
+  })
+
   it('renames current and non-current saved soundscapes independently', async () => {
     const user = userEvent.setup()
     const saved = (id: string, name: string): SoundscapeManifest => ({
@@ -258,6 +411,7 @@ describe('App', () => {
       name,
       updatedAt: '2026-08-16T00:00:00.000Z',
       masterVolume: 1,
+      timerSettings: { mode: 'stopwatch', minutes: 10, startMedia: true },
       tracks: []
     })
     let records = [
@@ -324,6 +478,7 @@ describe('App', () => {
       name: 'Saved scene',
       updatedAt: '2026-08-16T00:00:00.000Z',
       masterVolume: 0.6,
+      timerSettings: { mode: 'stopwatch', minutes: 10, startMedia: true },
       image: {
         name: 'forest.jpg',
         mimeType: 'image/jpeg',
@@ -376,6 +531,7 @@ describe('App', () => {
       name: 'Drive import',
       updatedAt: '2026-08-16T00:00:00.000Z',
       masterVolume: 1,
+      timerSettings: { mode: 'stopwatch', minutes: 10, startMedia: true },
       image: {
         name: 'forest.jpg',
         mimeType: 'image/jpeg',
@@ -419,6 +575,16 @@ describe('App', () => {
     render(<App engine={createMockEngine()} />)
     await screen.findByText('rain.wav')
 
+    await user.selectOptions(screen.getByLabelText('Timer type'), 'countdown')
+    fireEvent.change(screen.getByLabelText('Minutes'), {
+      target: { value: '25' }
+    })
+    await user.click(
+      screen.getByLabelText(
+        'Play all audio and full screen the image when meditation starts'
+      )
+    )
+
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
@@ -431,6 +597,11 @@ describe('App', () => {
         'cached-image.media'
       )
       expect(newFiles.size).toBe(0)
+      expect(savedManifest.timerSettings).toEqual({
+        mode: 'countdown',
+        minutes: 25,
+        startMedia: false
+      })
     }
   })
 
@@ -778,6 +949,11 @@ describe('App', () => {
       { target: { files: [audioFile('rain.wav')] } }
     )
     await act(async () => {})
+    fireEvent.click(
+      screen.getByLabelText(
+        'Play all audio and full screen the image when meditation starts'
+      )
+    )
 
     const start = screen.getByRole('button', { name: /Start Meditation/ })
     fireEvent.click(start)
@@ -806,6 +982,11 @@ describe('App', () => {
       { target: { files: [audioFile('rain.wav')] } }
     )
     await act(async () => {})
+    fireEvent.click(
+      screen.getByLabelText(
+        'Play all audio and full screen the image when meditation starts'
+      )
+    )
 
     fireEvent.change(screen.getByLabelText('Timer type'), {
       target: { value: 'countdown' }
@@ -906,11 +1087,11 @@ describe('App', () => {
       [audioFile('rain.wav'), imageFile('forest.jpg')]
     )
 
-    await user.click(
+    expect(
       screen.getByLabelText(
         'Play all audio and full screen the image when meditation starts'
       )
-    )
+    ).toBeChecked()
     await user.click(screen.getByRole('button', { name: /Start Meditation/ }))
 
     expect(engine.playAll).toHaveBeenCalledWith(['track-0'])

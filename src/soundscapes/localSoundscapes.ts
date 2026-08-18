@@ -162,16 +162,18 @@ export class LocalSoundscapeStore {
     )
     if (!stored) return undefined
     const manifest = parseSoundscapeManifest(stored.manifest)
-    const directory = await (await this.root()).getDirectoryHandle(id)
     const files = new Map<string, File>()
-    for (const media of mediaFiles(manifest)) {
+    const media = mediaFiles(manifest)
+    if (media.length === 0) return { manifest, files }
+    const directory = await (await this.root()).getDirectoryHandle(id)
+    for (const item of media) {
       const storedFile = await (
-        await directory.getFileHandle(media.reference.localPath)
+        await directory.getFileHandle(item.reference.localPath)
       ).getFile()
       files.set(
-        media.reference.localPath,
-        new File([storedFile], media.name, {
-          type: media.mimeType,
+        item.reference.localPath,
+        new File([storedFile], item.name, {
+          type: item.mimeType,
           lastModified: storedFile.lastModified
         })
       )

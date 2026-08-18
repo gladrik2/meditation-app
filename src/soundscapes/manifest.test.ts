@@ -52,7 +52,11 @@ describe('soundscape manifest', () => {
       tracks: [track]
     })
 
-    expect(manifest).toMatchObject({ version: 1, masterVolume: 1 })
+    expect(manifest).toMatchObject({
+      version: 1,
+      masterVolume: 1,
+      timerSettings: { mode: 'stopwatch', minutes: 10, startMedia: true }
+    })
   })
 
   it('preserves track order and settings', () => {
@@ -88,5 +92,39 @@ describe('soundscape manifest', () => {
     ]
   ])('rejects malformed or unsupported manifests', (value, message) => {
     expect(() => parseSoundscapeManifest(value)).toThrow(message)
+  })
+
+  it.each([
+    { mode: 'clock', minutes: 10, startMedia: true },
+    { mode: 'countdown', minutes: 0, startMedia: true },
+    { mode: 'countdown', minutes: 1.5, startMedia: true },
+    { mode: 'countdown', minutes: Number.NaN, startMedia: true },
+    { mode: 'stopwatch', minutes: 10, startMedia: 'yes' }
+  ])('rejects invalid timer settings: %o', (timerSettings) => {
+    expect(() =>
+      parseSoundscapeManifest({
+        version: 1,
+        id: 'id',
+        name: 'Broken timer',
+        updatedAt: 'today',
+        masterVolume: 1,
+        tracks: [],
+        timerSettings
+      })
+    ).toThrow(/invalid timer settings/i)
+  })
+
+  it('preserves valid timer settings', () => {
+    expect(
+      parseSoundscapeManifest({
+        version: 1,
+        id: 'id',
+        name: 'Timed',
+        updatedAt: 'today',
+        masterVolume: 1,
+        tracks: [],
+        timerSettings: { mode: 'countdown', minutes: 25, startMedia: false }
+      }).timerSettings
+    ).toEqual({ mode: 'countdown', minutes: 25, startMedia: false })
   })
 })
